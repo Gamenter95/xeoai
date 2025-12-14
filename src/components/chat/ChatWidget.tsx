@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, X, Send, Loader2, Bot, Sparkles, Minimize2 } from "lucide-react";
+import { MessageSquare, X, Send, Loader2, Minimize2, User } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -11,10 +11,22 @@ interface Message {
 interface ChatWidgetProps {
   businessId: string;
   businessName?: string;
+  businessDescription?: string;
+  businessAvatar?: string;
   primaryColor?: string;
+  position?: "bottom-right" | "bottom-left";
+  borderRadius?: "rounded" | "square";
 }
 
-export default function ChatWidget({ businessId, businessName = "AI Assistant", primaryColor }: ChatWidgetProps) {
+export default function ChatWidget({ 
+  businessId, 
+  businessName = "AI Assistant", 
+  businessDescription,
+  businessAvatar,
+  primaryColor = "#7c3aed",
+  position = "bottom-right",
+  borderRadius = "rounded"
+}: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -22,6 +34,18 @@ export default function ChatWidget({ businessId, businessName = "AI Assistant", 
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const positionClasses = position === "bottom-right" 
+    ? "right-6" 
+    : "left-6";
+
+  const radiusClasses = borderRadius === "rounded" 
+    ? "rounded-2xl" 
+    : "rounded-lg";
+
+  const widgetRadiusClasses = borderRadius === "rounded"
+    ? "rounded-3xl"
+    : "rounded-xl";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -98,6 +122,26 @@ export default function ChatWidget({ businessId, businessName = "AI Assistant", 
     }
   };
 
+  const Avatar = () => {
+    if (businessAvatar) {
+      return (
+        <img 
+          src={businessAvatar} 
+          alt={businessName} 
+          className={`w-10 h-10 ${radiusClasses} object-cover`}
+        />
+      );
+    }
+    return (
+      <div 
+        className={`w-10 h-10 ${radiusClasses} flex items-center justify-center text-white font-semibold text-sm`}
+        style={{ backgroundColor: primaryColor }}
+      >
+        {businessName.charAt(0).toUpperCase()}
+      </div>
+    );
+  };
+
   return (
     <>
       {/* Floating Button */}
@@ -107,22 +151,17 @@ export default function ChatWidget({ businessId, businessName = "AI Assistant", 
           setIsMinimized(false);
         }}
         className={`
-          fixed bottom-6 right-6 w-16 h-16 rounded-2xl 
-          gradient-primary shadow-xl flex items-center justify-center 
-          text-white z-50 transition-all duration-300 ease-out
-          hover:scale-110 hover:shadow-glow-lg
-          ${isOpen ? 'rotate-0' : 'animate-pulse-glow'}
+          fixed bottom-6 ${positionClasses} w-14 h-14 ${radiusClasses}
+          shadow-lg flex items-center justify-center 
+          text-white z-50 transition-all duration-200
+          hover:scale-105 hover:shadow-xl
         `}
-        style={{ 
-          background: primaryColor 
-            ? `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` 
-            : undefined 
-        }}
+        style={{ backgroundColor: primaryColor }}
       >
         {isOpen ? (
-          <X className="w-6 h-6" />
+          <X className="w-5 h-5" />
         ) : (
-          <MessageSquare className="w-6 h-6" />
+          <MessageSquare className="w-5 h-5" />
         )}
       </button>
 
@@ -130,86 +169,110 @@ export default function ChatWidget({ businessId, businessName = "AI Assistant", 
       {isOpen && !isMinimized && (
         <div 
           className={`
-            fixed bottom-28 right-6 w-[400px] h-[550px] 
-            bg-card border border-border rounded-3xl 
+            fixed bottom-24 ${positionClasses} w-[380px] h-[520px] 
+            bg-card border border-border ${widgetRadiusClasses}
             shadow-2xl flex flex-col z-50 overflow-hidden
             animate-scale-in
           `}
         >
           {/* Header */}
           <div 
-            className="p-5 flex items-center gap-4 gradient-primary"
-            style={{ 
-              background: primaryColor 
-                ? `linear-gradient(135deg, ${primaryColor}, ${primaryColor}dd)` 
-                : undefined 
-            }}
+            className="p-4 flex items-center gap-3"
+            style={{ backgroundColor: primaryColor }}
           >
             <div className="relative">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Bot className="w-6 h-6 text-white" />
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white" />
+              <Avatar />
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
             </div>
-            <div className="flex-1 text-white">
-              <p className="font-semibold text-lg">{businessName}</p>
-              <p className="text-sm opacity-80 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" />
-                Powered by AI
+            <div className="flex-1 text-white min-w-0">
+              <p className="font-semibold text-base truncate">{businessName}</p>
+              <p className="text-xs opacity-90 truncate">
+                {businessDescription || "Online"}
               </p>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="text-white/80 hover:text-white hover:bg-white/20 rounded-xl"
+              className="text-white/80 hover:text-white hover:bg-white/10 rounded-lg h-8 w-8"
               onClick={() => setIsMinimized(true)}
             >
-              <Minimize2 className="w-5 h-5" />
+              <Minimize2 className="w-4 h-4" />
             </Button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-muted/20 to-background">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
             {messages.length === 0 && (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 rounded-2xl gradient-primary mx-auto mb-4 flex items-center justify-center shadow-glow">
-                  <Bot className="w-8 h-8 text-white" />
+              <div className="text-center py-8">
+                <div 
+                  className={`w-14 h-14 ${radiusClasses} mx-auto mb-3 flex items-center justify-center text-white`}
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  <MessageSquare className="w-6 h-6" />
                 </div>
-                <h3 className="font-semibold text-lg mb-2">Welcome! 👋</h3>
-                <p className="text-muted-foreground text-sm max-w-[250px] mx-auto">
-                  I'm here to help answer your questions. How can I assist you today?
+                <h3 className="font-semibold text-base mb-1">Hello!</h3>
+                <p className="text-muted-foreground text-sm max-w-[240px] mx-auto">
+                  How can I help you today?
                 </p>
               </div>
             )}
             {messages.map((msg, i) => (
               <div 
                 key={i} 
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex items-end gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
+                {msg.role === "assistant" && (
+                  <div className="shrink-0">
+                    {businessAvatar ? (
+                      <img 
+                        src={businessAvatar} 
+                        alt={businessName} 
+                        className={`w-7 h-7 ${radiusClasses} object-cover`}
+                      />
+                    ) : (
+                      <div 
+                        className={`w-7 h-7 ${radiusClasses} flex items-center justify-center text-white text-xs font-semibold`}
+                        style={{ backgroundColor: primaryColor }}
+                      >
+                        {businessName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div
                   className={`
-                    max-w-[85%] p-4 text-sm leading-relaxed
+                    max-w-[75%] px-3.5 py-2.5 text-sm leading-relaxed
                     ${msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md shadow-lg"
-                      : "bg-card border border-border text-foreground rounded-2xl rounded-bl-md shadow-md"
+                      ? `text-white ${radiusClasses} rounded-br-sm`
+                      : `bg-card border border-border text-foreground ${radiusClasses} rounded-bl-sm`
                     }
                   `}
-                  style={msg.role === "user" && primaryColor ? { backgroundColor: primaryColor } : undefined}
+                  style={msg.role === "user" ? { backgroundColor: primaryColor } : undefined}
                 >
                   {msg.content}
                 </div>
+                {msg.role === "user" && (
+                  <div className="shrink-0">
+                    <div className={`w-7 h-7 ${radiusClasses} bg-muted flex items-center justify-center`}>
+                      <User className="w-3.5 h-3.5 text-muted-foreground" />
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-              <div className="flex justify-start">
-                <div className="bg-card border border-border p-4 rounded-2xl rounded-bl-md shadow-md">
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                    </div>
-                    <span className="text-xs text-muted-foreground">Thinking...</span>
+              <div className="flex items-end gap-2 justify-start">
+                <div 
+                  className={`w-7 h-7 ${radiusClasses} flex items-center justify-center text-white text-xs font-semibold`}
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  {businessName.charAt(0).toUpperCase()}
+                </div>
+                <div className={`bg-card border border-border px-4 py-3 ${radiusClasses} rounded-bl-sm`}>
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                 </div>
               </div>
@@ -218,34 +281,35 @@ export default function ChatWidget({ businessId, businessName = "AI Assistant", 
           </div>
 
           {/* Input */}
-          <div className="p-4 border-t border-border bg-card">
+          <div className="p-3 border-t border-border bg-card">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 sendMessage();
               }}
-              className="flex gap-3"
+              className="flex gap-2"
             >
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Type your message..."
+                placeholder="Type a message..."
                 disabled={isLoading}
-                className="flex-1 h-12 rounded-xl border-border/50 focus:border-primary bg-muted/50"
+                className={`flex-1 h-10 ${radiusClasses} border-border/50 focus:border-primary bg-muted/50 text-sm`}
               />
               <Button 
                 type="submit" 
                 size="icon" 
                 disabled={isLoading || !input.trim()}
-                className="h-12 w-12 rounded-xl gradient-primary border-0 shadow-lg hover:shadow-glow transition-all"
-                style={primaryColor ? { background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` } : undefined}
+                className={`h-10 w-10 ${radiusClasses} border-0 transition-all`}
+                style={{ backgroundColor: primaryColor }}
               >
-                <Send className="w-5 h-5" />
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
               </Button>
             </form>
-            <p className="text-center text-xs text-muted-foreground mt-3">
-              Powered by <span className="text-primary font-medium">XeoAI</span>
-            </p>
           </div>
         </div>
       )}
@@ -254,14 +318,10 @@ export default function ChatWidget({ businessId, businessName = "AI Assistant", 
       {isOpen && isMinimized && (
         <button
           onClick={() => setIsMinimized(false)}
-          className="fixed bottom-28 right-6 px-6 py-3 rounded-2xl gradient-primary shadow-xl text-white z-50 flex items-center gap-2 hover:shadow-glow-lg transition-all animate-scale-in"
-          style={{ 
-            background: primaryColor 
-              ? `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` 
-              : undefined 
-          }}
+          className={`fixed bottom-24 ${positionClasses} px-4 py-2.5 ${radiusClasses} shadow-lg text-white z-50 flex items-center gap-2 hover:shadow-xl transition-all animate-scale-in text-sm`}
+          style={{ backgroundColor: primaryColor }}
         >
-          <Bot className="w-5 h-5" />
+          <MessageSquare className="w-4 h-4" />
           <span className="font-medium">Continue Chat</span>
           {messages.length > 0 && (
             <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
