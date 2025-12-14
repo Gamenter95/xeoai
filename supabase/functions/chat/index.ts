@@ -1,3 +1,4 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -21,9 +22,9 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not configured");
       return new Response(
         JSON.stringify({ error: "AI service is not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -97,7 +98,7 @@ serve(async (req) => {
     const faqs = faqsResult.data || [];
     const customInstructions = instructionsResult.data?.instructions || "";
 
-    // Build system prompt
+    // Build system prompt with AI memory context
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const hoursText = hours.map((h: any) => {
       if (h.is_closed) return `${dayNames[h.day_of_week]}: Closed`;
@@ -110,45 +111,46 @@ serve(async (req) => {
 
     const faqsText = faqs.map((f: any) => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n");
 
-    const systemPrompt = `You are a helpful AI assistant for ${business.name}. Your role is to assist customers with questions about the business.
+    const systemPrompt = `You are a helpful, friendly, and professional AI assistant for ${business.name}. You have been trained with comprehensive knowledge about this business and should provide accurate, helpful responses.
 
-Business Information:
-- Name: ${business.name}
-${business.description ? `- Description: ${business.description}` : ""}
-${business.contact_email ? `- Email: ${business.contact_email}` : ""}
-${business.contact_phone ? `- Phone: ${business.contact_phone}` : ""}
-${business.website ? `- Website: ${business.website}` : ""}
-${business.address ? `- Address: ${business.address}` : ""}
+## Business Profile
+**Name:** ${business.name}
+${business.description ? `**About:** ${business.description}` : ""}
 
-${hoursText ? `Business Hours:\n${hoursText}` : ""}
+${hoursText ? `## Operating Hours\n${hoursText}` : ""}
 
-${servicesText ? `Services Offered:\n${servicesText}` : ""}
+${servicesText ? `## Services & Products\n${servicesText}` : ""}
 
-${faqsText ? `Frequently Asked Questions:\n${faqsText}` : ""}
+${faqsText ? `## Knowledge Base (FAQ)\n${faqsText}` : ""}
 
-${customInstructions ? `Additional Instructions:\n${customInstructions}` : ""}
+${customInstructions ? `## Special Instructions & AI Memory\n${customInstructions}` : ""}
 
-Guidelines:
-- Be helpful, professional, and friendly
-- Only provide information about this specific business
-- If you don't have information to answer a question, politely say so and suggest contacting the business directly
-- Keep responses concise but informative
-- Do not make up information that wasn't provided`;
+## Response Guidelines
+- Be warm, professional, and conversational
+- Provide accurate information based on the business data above
+- If asked about something not covered in the data, politely explain you don't have that specific information and suggest contacting the business directly
+- Keep responses helpful but concise
+- Use markdown formatting for better readability when appropriate
+- Remember context from the conversation and provide personalized responses
+- Never make up information that wasn't provided
+- If the business has specific instructions above, follow them carefully`;
 
-    // Call AI Gateway
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Call OpenAI API
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
           ...messages,
         ],
         stream: true,
+        max_tokens: 1000,
+        temperature: 0.7,
       }),
     });
 
@@ -159,16 +161,10 @@ Guidelines:
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI service quota exceeded." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      console.error("OpenAI API error:", response.status, errorText);
       return new Response(
-        JSON.stringify({ error: "AI gateway error" }),
+        JSON.stringify({ error: "AI service error" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
