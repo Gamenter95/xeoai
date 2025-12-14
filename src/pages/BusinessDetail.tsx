@@ -9,11 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Loader2, Clock, HelpCircle, Brain, Briefcase } from "lucide-react";
 
 interface Business {
   id: string;
@@ -59,7 +58,6 @@ export default function BusinessDetail() {
   const [savingHours, setSavingHours] = useState(false);
   const [savingInstructions, setSavingInstructions] = useState(false);
 
-  // New item forms
   const [newService, setNewService] = useState({ name: "", description: "", price: "" });
   const [newFaq, setNewFaq] = useState({ question: "", answer: "" });
   const [addingService, setAddingService] = useState(false);
@@ -80,7 +78,7 @@ export default function BusinessDetail() {
   const fetchData = async () => {
     try {
       const [businessResult, hoursResult, servicesResult, faqsResult, instructionsResult] = await Promise.all([
-        supabase.from("businesses").select("*").eq("id", id).single(),
+        supabase.from("businesses").select("id, name, description").eq("id", id).single(),
         supabase.from("business_hours").select("*").eq("business_id", id).order("day_of_week"),
         supabase.from("business_services").select("*").eq("business_id", id).order("created_at"),
         supabase.from("business_faqs").select("*").eq("business_id", id).order("created_at"),
@@ -94,7 +92,6 @@ export default function BusinessDetail() {
 
       setBusiness(businessResult.data);
 
-      // Initialize hours for all days
       const existingHours = hoursResult.data || [];
       const allHours: BusinessHour[] = [];
       for (let i = 0; i < 7; i++) {
@@ -116,10 +113,8 @@ export default function BusinessDetail() {
   const saveHours = async () => {
     setSavingHours(true);
     try {
-      // Delete existing hours
       await supabase.from("business_hours").delete().eq("business_id", id);
 
-      // Insert new hours
       const { error } = await supabase.from("business_hours").insert(
         hours.map((h) => ({
           business_id: id,
@@ -225,7 +220,7 @@ export default function BusinessDetail() {
         }, { onConflict: "business_id" });
 
       if (error) throw error;
-      toast({ title: "Custom instructions saved" });
+      toast({ title: "AI instructions saved" });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
@@ -238,7 +233,7 @@ export default function BusinessDetail() {
       <DashboardLayout>
         <div className="space-y-6">
           <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-96" />
+          <Skeleton className="h-96 rounded-2xl" />
         </div>
       </DashboardLayout>
     );
@@ -248,38 +243,53 @@ export default function BusinessDetail() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 animate-fade-in">
+      <div className="space-y-8 animate-fade-in">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/businesses")}>
+          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/businesses")} className="rounded-xl">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-display font-bold">{business.name}</h1>
+            <h1 className="text-3xl font-bold">{business.name}</h1>
             <p className="text-muted-foreground mt-1">
-              Manage your business chatbot settings
+              Configure your AI chatbot's knowledge and behavior
             </p>
           </div>
         </div>
 
-        <Tabs defaultValue="hours" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="hours">Business Hours</TabsTrigger>
-            <TabsTrigger value="services">Services</TabsTrigger>
-            <TabsTrigger value="faqs">FAQs</TabsTrigger>
-            <TabsTrigger value="instructions">Custom Instructions</TabsTrigger>
+        <Tabs defaultValue="hours" className="space-y-6">
+          <TabsList className="bg-muted/50 p-1 rounded-xl">
+            <TabsTrigger value="hours" className="gap-2 rounded-lg data-[state=active]:shadow-md">
+              <Clock className="w-4 h-4" />
+              Hours
+            </TabsTrigger>
+            <TabsTrigger value="services" className="gap-2 rounded-lg data-[state=active]:shadow-md">
+              <Briefcase className="w-4 h-4" />
+              Services
+            </TabsTrigger>
+            <TabsTrigger value="faqs" className="gap-2 rounded-lg data-[state=active]:shadow-md">
+              <HelpCircle className="w-4 h-4" />
+              FAQs
+            </TabsTrigger>
+            <TabsTrigger value="instructions" className="gap-2 rounded-lg data-[state=active]:shadow-md">
+              <Brain className="w-4 h-4" />
+              AI Memory
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="hours">
-            <Card>
+            <Card className="rounded-2xl">
               <CardHeader>
-                <CardTitle>Business Hours</CardTitle>
-                <CardDescription>Set your operating hours for each day of the week</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-primary" />
+                  Business Hours
+                </CardTitle>
+                <CardDescription>Set your operating hours - the AI will inform customers accordingly</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {hours.map((hour, index) => (
-                  <div key={hour.day_of_week} className="flex items-center gap-4">
+                  <div key={hour.day_of_week} className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
                     <div className="w-28 font-medium">{dayNames[hour.day_of_week]}</div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       <Switch
                         checked={!hour.is_closed}
                         onCheckedChange={(checked) => {
@@ -288,12 +298,12 @@ export default function BusinessDetail() {
                           setHours(newHours);
                         }}
                       />
-                      <span className="text-sm text-muted-foreground">
+                      <span className={`text-sm ${hour.is_closed ? 'text-destructive' : 'text-green-600'}`}>
                         {hour.is_closed ? "Closed" : "Open"}
                       </span>
                     </div>
                     {!hour.is_closed && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 ml-auto">
                         <Input
                           type="time"
                           value={hour.open_time || "09:00"}
@@ -304,7 +314,7 @@ export default function BusinessDetail() {
                           }}
                           className="w-32"
                         />
-                        <span>to</span>
+                        <span className="text-muted-foreground">to</span>
                         <Input
                           type="time"
                           value={hour.close_time || "17:00"}
@@ -319,7 +329,7 @@ export default function BusinessDetail() {
                     )}
                   </div>
                 ))}
-                <Button onClick={saveHours} disabled={savingHours} className="mt-4">
+                <Button onClick={saveHours} disabled={savingHours} className="mt-4 gradient-primary border-0">
                   {savingHours ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Save Hours
                 </Button>
@@ -328,13 +338,16 @@ export default function BusinessDetail() {
           </TabsContent>
 
           <TabsContent value="services">
-            <Card>
+            <Card className="rounded-2xl">
               <CardHeader>
-                <CardTitle>Services</CardTitle>
-                <CardDescription>List the services your business offers</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <Briefcase className="w-5 h-5 text-primary" />
+                  Services & Products
+                </CardTitle>
+                <CardDescription>Add your services - the AI will use this to answer customer questions</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-4 p-4 rounded-xl bg-muted/30">
                   <Input
                     placeholder="Service name"
                     value={newService.name}
@@ -345,39 +358,38 @@ export default function BusinessDetail() {
                     value={newService.description}
                     onChange={(e) => setNewService({ ...newService, description: e.target.value })}
                   />
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Price (optional)"
-                      value={newService.price}
-                      onChange={(e) => setNewService({ ...newService, price: e.target.value })}
-                    />
-                    <Button onClick={addService} disabled={addingService || !newService.name.trim()}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  <Input
+                    placeholder="Price (optional)"
+                    value={newService.price}
+                    onChange={(e) => setNewService({ ...newService, price: e.target.value })}
+                  />
+                  <Button onClick={addService} disabled={addingService || !newService.name.trim()} className="gradient-primary border-0">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add
+                  </Button>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {services.map((service) => (
-                    <div key={service.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div key={service.id} className="flex items-center justify-between p-4 rounded-xl bg-card border hover:border-primary/30 transition-colors">
                       <div>
                         <p className="font-medium">{service.name}</p>
                         {service.description && (
-                          <p className="text-sm text-muted-foreground">{service.description}</p>
+                          <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         {service.price && (
-                          <span className="text-sm font-medium text-primary">{service.price}</span>
+                          <span className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full">{service.price}</span>
                         )}
-                        <Button variant="ghost" size="icon" onClick={() => deleteService(service.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
+                        <Button variant="ghost" size="icon" onClick={() => deleteService(service.id)} className="text-destructive hover:text-destructive rounded-lg">
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
                   ))}
                   {services.length === 0 && (
-                    <p className="text-center text-muted-foreground py-4">No services added yet</p>
+                    <p className="text-center text-muted-foreground py-8">No services added yet</p>
                   )}
                 </div>
               </CardContent>
@@ -385,20 +397,23 @@ export default function BusinessDetail() {
           </TabsContent>
 
           <TabsContent value="faqs">
-            <Card>
+            <Card className="rounded-2xl">
               <CardHeader>
-                <CardTitle>FAQs</CardTitle>
-                <CardDescription>Add frequently asked questions to train your chatbot</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <HelpCircle className="w-5 h-5 text-primary" />
+                  Frequently Asked Questions
+                </CardTitle>
+                <CardDescription>Train your AI with common questions and answers</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
+              <CardContent className="space-y-6">
+                <div className="space-y-4 p-4 rounded-xl bg-muted/30">
                   <Input
-                    placeholder="Question"
+                    placeholder="Question (e.g., What are your prices?)"
                     value={newFaq.question}
                     onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
                   />
                   <Textarea
-                    placeholder="Answer"
+                    placeholder="Answer (be detailed for better AI responses)"
                     value={newFaq.answer}
                     onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
                     rows={3}
@@ -406,29 +421,29 @@ export default function BusinessDetail() {
                   <Button
                     onClick={addFaq}
                     disabled={addingFaq || !newFaq.question.trim() || !newFaq.answer.trim()}
-                    className="gap-2"
+                    className="gap-2 gradient-primary border-0"
                   >
                     <Plus className="w-4 h-4" />
                     Add FAQ
                   </Button>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {faqs.map((faq) => (
-                    <div key={faq.id} className="p-3 border rounded-lg">
+                    <div key={faq.id} className="p-4 rounded-xl bg-card border hover:border-primary/30 transition-colors">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <p className="font-medium">Q: {faq.question}</p>
-                          <p className="text-sm text-muted-foreground mt-1">A: {faq.answer}</p>
+                          <p className="font-medium text-primary">Q: {faq.question}</p>
+                          <p className="text-muted-foreground mt-2">A: {faq.answer}</p>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => deleteFaq(faq.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
+                        <Button variant="ghost" size="icon" onClick={() => deleteFaq(faq.id)} className="text-destructive hover:text-destructive rounded-lg ml-4">
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
                   ))}
                   {faqs.length === 0 && (
-                    <p className="text-center text-muted-foreground py-4">No FAQs added yet</p>
+                    <p className="text-center text-muted-foreground py-8">No FAQs added yet</p>
                   )}
                 </div>
               </CardContent>
@@ -436,27 +451,41 @@ export default function BusinessDetail() {
           </TabsContent>
 
           <TabsContent value="instructions">
-            <Card>
+            <Card className="rounded-2xl">
               <CardHeader>
-                <CardTitle>Custom Instructions</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-primary" />
+                  AI Memory & Instructions
+                </CardTitle>
                 <CardDescription>
-                  Add special instructions for how your chatbot should behave
+                  Provide custom instructions for your AI - this is the AI's "memory" that guides its behavior
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Textarea
-                  placeholder="E.g., Always greet customers warmly, focus on promoting our premium services, avoid discussing competitor pricing..."
+                  placeholder="Examples:
+• Always greet customers warmly with their name if known
+• Focus on promoting our premium services
+• Avoid discussing competitor pricing
+• If asked about refunds, explain our 30-day policy
+• Use a friendly, professional tone
+• Remember that our biggest sale is in December
+• Our CEO's name is John Smith"
                   value={customInstructions}
                   onChange={(e) => setCustomInstructions(e.target.value)}
-                  rows={6}
+                  rows={10}
+                  className="resize-none font-mono text-sm"
                 />
-                <Button onClick={saveInstructions} disabled={savingInstructions}>
+                <p className="text-xs text-muted-foreground">
+                  💡 Tip: Be specific! The more details you provide, the smarter your AI becomes.
+                </p>
+                <Button onClick={saveInstructions} disabled={savingInstructions} className="gradient-primary border-0">
                   {savingInstructions ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Save className="mr-2 h-4 w-4" />
                   )}
-                  Save Instructions
+                  Save AI Instructions
                 </Button>
               </CardContent>
             </Card>

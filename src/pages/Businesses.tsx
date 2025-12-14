@@ -11,27 +11,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, Edit, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import { Plus, Building2, Edit, Trash2, Settings, Code, Loader2, Sparkles } from "lucide-react";
 import { z } from "zod";
 
 interface Business {
   id: string;
   name: string;
   description: string | null;
-  contact_email: string | null;
-  contact_phone: string | null;
-  website: string | null;
-  address: string | null;
   created_at: string;
 }
 
 const businessSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(100),
-  description: z.string().max(500).optional(),
-  contact_email: z.string().email().optional().or(z.literal("")),
-  contact_phone: z.string().max(20).optional(),
-  website: z.string().url().optional().or(z.literal("")),
-  address: z.string().max(200).optional(),
+  description: z.string().max(1000).optional(),
 });
 
 export default function Businesses() {
@@ -44,14 +36,9 @@ export default function Businesses() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
 
-  // Form state
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    contact_email: "",
-    contact_phone: "",
-    website: "",
-    address: "",
   });
 
   useEffect(() => {
@@ -70,7 +57,7 @@ export default function Businesses() {
     try {
       const { data, error } = await supabase
         .from("businesses")
-        .select("*")
+        .select("id, name, description, created_at")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
 
@@ -110,10 +97,6 @@ export default function Businesses() {
           .update({
             name: formData.name,
             description: formData.description || null,
-            contact_email: formData.contact_email || null,
-            contact_phone: formData.contact_phone || null,
-            website: formData.website || null,
-            address: formData.address || null,
           })
           .eq("id", editingBusiness.id);
 
@@ -124,10 +107,6 @@ export default function Businesses() {
           user_id: user!.id,
           name: formData.name,
           description: formData.description || null,
-          contact_email: formData.contact_email || null,
-          contact_phone: formData.contact_phone || null,
-          website: formData.website || null,
-          address: formData.address || null,
         });
 
         if (error) throw error;
@@ -153,10 +132,6 @@ export default function Businesses() {
     setFormData({
       name: business.name,
       description: business.description || "",
-      contact_email: business.contact_email || "",
-      contact_phone: business.contact_phone || "",
-      website: business.website || "",
-      address: business.address || "",
     });
     setIsDialogOpen(true);
   };
@@ -185,10 +160,6 @@ export default function Businesses() {
     setFormData({
       name: "",
       description: "",
-      contact_email: "",
-      contact_phone: "",
-      website: "",
-      address: "",
     });
   };
 
@@ -197,10 +168,10 @@ export default function Businesses() {
       <DashboardLayout>
         <div className="space-y-6">
           <Skeleton className="h-10 w-48" />
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Skeleton className="h-48" />
-            <Skeleton className="h-48" />
-            <Skeleton className="h-48" />
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Skeleton className="h-64 rounded-2xl" />
+            <Skeleton className="h-64 rounded-2xl" />
+            <Skeleton className="h-64 rounded-2xl" />
           </div>
         </div>
       </DashboardLayout>
@@ -209,12 +180,12 @@ export default function Businesses() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 animate-fade-in">
+      <div className="space-y-8 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-display font-bold">Businesses</h1>
+            <h1 className="text-3xl font-bold">My Businesses</h1>
             <p className="text-muted-foreground mt-1">
-              Manage your businesses and their chatbot settings
+              Create and manage AI chatbots for your businesses
             </p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
@@ -222,96 +193,62 @@ export default function Businesses() {
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button className="gap-2 gradient-primary border-0 shadow-lg hover:shadow-glow">
                 <Plus className="w-4 h-4" />
                 Add Business
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>
-                  {editingBusiness ? "Edit Business" : "Add New Business"}
+                <DialogTitle className="text-xl">
+                  {editingBusiness ? "Edit Business" : "Create New Business"}
                 </DialogTitle>
                 <DialogDescription>
                   {editingBusiness
                     ? "Update your business information"
-                    : "Add a new business to create a chatbot for"}
+                    : "Add a new business to create an AI chatbot"}
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+              <form onSubmit={handleSubmit} className="space-y-6 mt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Business Name *</Label>
+                  <Label htmlFor="name" className="text-sm font-medium">Business Name *</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="My Business"
+                    placeholder="Enter your business name"
+                    className="h-12"
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="description" className="text-sm font-medium">Description</Label>
                   <Textarea
                     id="description"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Brief description of your business..."
-                    rows={3}
+                    placeholder="Describe your business and what it offers..."
+                    rows={4}
+                    className="resize-none"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    This helps the AI understand your business better
+                  </p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Contact Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.contact_email}
-                      onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                      placeholder="contact@example.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Contact Phone</Label>
-                    <Input
-                      id="phone"
-                      value={formData.contact_phone}
-                      onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                      placeholder="+1 234 567 8900"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="website">Website</Label>
-                  <Input
-                    id="website"
-                    value={formData.website}
-                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                    placeholder="https://example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    id="address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="123 Main St, City, Country"
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-4">
+                <div className="flex justify-end gap-3 pt-4">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isSubmitting}>
+                  <Button type="submit" disabled={isSubmitting} className="gradient-primary border-0">
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Saving...
                       </>
                     ) : editingBusiness ? (
-                      "Update"
+                      "Update Business"
                     ) : (
-                      "Create"
+                      "Create Business"
                     )}
                   </Button>
                 </div>
@@ -321,37 +258,42 @@ export default function Businesses() {
         </div>
 
         {loadingData ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Skeleton className="h-48" />
-            <Skeleton className="h-48" />
-            <Skeleton className="h-48" />
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Skeleton className="h-64 rounded-2xl" />
+            <Skeleton className="h-64 rounded-2xl" />
+            <Skeleton className="h-64 rounded-2xl" />
           </div>
         ) : businesses.length === 0 ? (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Building2 className="w-12 h-12 text-muted-foreground mb-4" />
-              <h3 className="font-semibold text-lg mb-2">No businesses yet</h3>
-              <p className="text-muted-foreground text-center mb-4">
-                Create your first business to get started with AI chatbots
+          <Card className="border-dashed border-2 rounded-2xl">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mb-6 shadow-glow">
+                <Building2 className="w-8 h-8 text-primary-foreground" />
+              </div>
+              <h3 className="font-semibold text-xl mb-2">No businesses yet</h3>
+              <p className="text-muted-foreground text-center max-w-sm mb-6">
+                Create your first business to start building an AI chatbot that understands your customers
               </p>
-              <Button onClick={() => setIsDialogOpen(true)} className="gap-2">
+              <Button onClick={() => setIsDialogOpen(true)} className="gap-2 gradient-primary border-0 shadow-lg">
                 <Plus className="w-4 h-4" />
-                Add Business
+                Create Your First Business
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {businesses.map((business) => (
-              <Card key={business.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="truncate">{business.name}</span>
+              <Card key={business.id} className="group rounded-2xl border border-border hover:border-primary/50 transition-all duration-300 hover-lift overflow-hidden">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center shadow-lg group-hover:shadow-glow transition-shadow">
+                      <Sparkles className="w-5 h-5 text-primary-foreground" />
+                    </div>
                     <div className="flex gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleEdit(business)}
+                        className="h-8 w-8 rounded-lg"
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
@@ -359,51 +301,37 @@ export default function Businesses() {
                         variant="ghost"
                         size="icon"
                         onClick={() => handleDelete(business.id)}
-                        className="text-destructive hover:text-destructive"
+                        className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
-                  </CardTitle>
+                  </div>
+                  <CardTitle className="text-lg mt-4">{business.name}</CardTitle>
                   {business.description && (
-                    <CardDescription className="line-clamp-2">
+                    <CardDescription className="line-clamp-2 mt-1">
                       {business.description}
                     </CardDescription>
                   )}
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 text-sm">
-                    {business.contact_email && (
-                      <p className="text-muted-foreground">{business.contact_email}</p>
-                    )}
-                    {business.website && (
-                      <a
-                        href={business.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline flex items-center gap-1"
-                      >
-                        Visit website
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
-                  </div>
-                  <div className="flex gap-2 mt-4">
+                <CardContent className="pt-0">
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-1"
+                      className="flex-1 gap-2 rounded-lg"
                       onClick={() => navigate(`/dashboard/businesses/${business.id}`)}
                     >
-                      Manage
+                      <Settings className="w-4 h-4" />
+                      Configure
                     </Button>
                     <Button
-                      variant="default"
                       size="sm"
-                      className="flex-1"
+                      className="flex-1 gap-2 rounded-lg gradient-primary border-0"
                       onClick={() => navigate(`/dashboard/embed?business=${business.id}`)}
                     >
-                      Get Embed
+                      <Code className="w-4 h-4" />
+                      Embed
                     </Button>
                   </div>
                 </CardContent>
