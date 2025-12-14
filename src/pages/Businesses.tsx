@@ -183,9 +183,9 @@ export default function Businesses() {
       <div className="space-y-8 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">My Businesses</h1>
-            <p className="text-muted-foreground mt-1">
-              Create and manage AI chatbots for your businesses
+            <h1 className="text-2xl font-bold">My Chatbots</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              Create and manage AI chatbots
             </p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
@@ -193,31 +193,31 @@ export default function Businesses() {
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button className="gap-2 gradient-primary border-0 shadow-lg hover:shadow-glow">
+              <Button className="gap-2" size="sm">
                 <Plus className="w-4 h-4" />
-                Add Business
+                New Chatbot
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle className="text-xl">
-                  {editingBusiness ? "Edit Business" : "Create New Business"}
+                <DialogTitle className="text-lg">
+                  {editingBusiness ? "Edit Chatbot" : "Create New Chatbot"}
                 </DialogTitle>
                 <DialogDescription>
                   {editingBusiness
-                    ? "Update your business information"
-                    : "Add a new business to create an AI chatbot"}
+                    ? "Update your chatbot information"
+                    : "Add a new chatbot for your business"}
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-6 mt-4">
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name" className="text-sm font-medium">Business Name *</Label>
+                  <Label htmlFor="name" className="text-sm font-medium">Chatbot Name *</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Enter your business name"
-                    className="h-12"
+                    placeholder="Enter chatbot name"
+                    className="h-10"
                     required
                   />
                 </div>
@@ -235,20 +235,20 @@ export default function Businesses() {
                     This helps the AI understand your business better
                   </p>
                 </div>
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <div className="flex justify-end gap-3 pt-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setIsDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isSubmitting} className="gradient-primary border-0">
+                  <Button type="submit" disabled={isSubmitting} size="sm">
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Saving...
                       </>
                     ) : editingBusiness ? (
-                      "Update Business"
+                      "Update"
                     ) : (
-                      "Create Business"
+                      "Create"
                     )}
                   </Button>
                 </div>
@@ -264,18 +264,18 @@ export default function Businesses() {
             <Skeleton className="h-64 rounded-2xl" />
           </div>
         ) : businesses.length === 0 ? (
-          <Card className="border-dashed border-2 rounded-2xl">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mb-6 shadow-glow">
-                <Building2 className="w-8 h-8 text-primary-foreground" />
+          <Card className="border-dashed border-2 rounded-xl">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                <Building2 className="w-6 h-6 text-primary" />
               </div>
-              <h3 className="font-semibold text-xl mb-2">No businesses yet</h3>
-              <p className="text-muted-foreground text-center max-w-sm mb-6">
-                Create your first business to start building an AI chatbot that understands your customers
+              <h3 className="font-semibold text-lg mb-1">No chatbots yet</h3>
+              <p className="text-muted-foreground text-center max-w-sm text-sm mb-4">
+                Create your first chatbot to start engaging with customers
               </p>
-              <Button onClick={() => setIsDialogOpen(true)} className="gap-2 gradient-primary border-0 shadow-lg">
+              <Button onClick={() => setIsDialogOpen(true)} size="sm" className="gap-2">
                 <Plus className="w-4 h-4" />
-                Create Your First Business
+                Create Chatbot
               </Button>
             </CardContent>
           </Card>
