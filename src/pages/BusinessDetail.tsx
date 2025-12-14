@@ -1,0 +1,468 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, Plus, Trash2, Save, Loader2 } from "lucide-react";
+
+interface Business {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+interface BusinessHour {
+  id?: string;
+  day_of_week: number;
+  open_time: string | null;
+  close_time: string | null;
+  is_closed: boolean;
+}
+
+interface Service {
+  id: string;
+  name: string;
+  description: string | null;
+  price: string | null;
+}
+
+interface FAQ {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export default function BusinessDetail() {
+  const { id } = useParams<{ id: string }>();
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const [business, setBusiness] = useState<Business | null>(null);
+  const [hours, setHours] = useState<BusinessHour[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [faqs, setFaqs] = useState<FAQ[]>([]);
+  const [customInstructions, setCustomInstructions] = useState("");
+  const [loadingData, setLoadingData] = useState(true);
+  const [savingHours, setSavingHours] = useState(false);
+  const [savingInstructions, setSavingInstructions] = useState(false);
+
+  // New item forms
+  const [newService, setNewService] = useState({ name: "", description: "", price: "" });
+  const [newFaq, setNewFaq] = useState({ question: "", answer: "" });
+  const [addingService, setAddingService] = useState(false);
+  const [addingFaq, setAddingFaq] = useState(false);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate("/auth");
+    }
+  }, [user, loading, navigate]);
+
+  useEffect(() => {
+    if (user && id) {
+      fetchData();
+    }
+  }, [user, id]);
+
+  const fetchData = async () => {
+    try {
+      const [businessResult, hoursResult, servicesResult, faqsResult, instructionsResult] = await Promise.all([
+        supabase.from("businesses").select("*").eq("id", id).single(),
+        supabase.from("business_hours").select("*").eq("business_id", id).order("day_of_week"),
+        supabase.from("business_services").select("*").eq("business_id", id).order("created_at"),
+        supabase.from("business_faqs").select("*").eq("business_id", id).order("created_at"),
+        supabase.from("business_custom_instructions").select("*").eq("business_id", id).single(),
+      ]);
+
+      if (businessResult.error || !businessResult.data) {
+        navigate("/dashboard/businesses");
+        return;
+      }
+
+      setBusiness(businessResult.data);
+
+      // Initialize hours for all days
+      const existingHours = hoursResult.data || [];
+      const allHours: BusinessHour[] = [];
+      for (let i = 0; i < 7; i++) {
+        const existing = existingHours.find((h: any) => h.day_of_week === i);
+        allHours.push(existing || { day_of_week: i, open_time: "09:00", close_time: "17:00", is_closed: false });
+      }
+      setHours(allHours);
+
+      setServices(servicesResult.data || []);
+      setFaqs(faqsResult.data || []);
+      setCustomInstructions(instructionsResult.data?.instructions || "");
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const saveHours = async () => {
+    setSavingHours(true);
+    try {
+      // Delete existing hours
+      await supabase.from("business_hours").delete().eq("business_id", id);
+
+      // Insert new hours
+      const { error } = await supabase.from("business_hours").insert(
+        hours.map((h) => ({
+          business_id: id,
+          day_of_week: h.day_of_week,
+          open_time: h.is_closed ? null : h.open_time,
+          close_time: h.is_closed ? null : h.close_time,
+          is_closed: h.is_closed,
+        }))
+      );
+
+      if (error) throw error;
+      toast({ title: "Business hours saved" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setSavingHours(false);
+    }
+  };
+
+  const addService = async () => {
+    if (!newService.name.trim()) return;
+    setAddingService(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("business_services")
+        .insert({
+          business_id: id,
+          name: newService.name,
+          description: newService.description || null,
+          price: newService.price || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setServices([...services, data]);
+      setNewService({ name: "", description: "", price: "" });
+      toast({ title: "Service added" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setAddingService(false);
+    }
+  };
+
+  const deleteService = async (serviceId: string) => {
+    try {
+      const { error } = await supabase.from("business_services").delete().eq("id", serviceId);
+      if (error) throw error;
+      setServices(services.filter((s) => s.id !== serviceId));
+      toast({ title: "Service deleted" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  };
+
+  const addFaq = async () => {
+    if (!newFaq.question.trim() || !newFaq.answer.trim()) return;
+    setAddingFaq(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("business_faqs")
+        .insert({
+          business_id: id,
+          question: newFaq.question,
+          answer: newFaq.answer,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setFaqs([...faqs, data]);
+      setNewFaq({ question: "", answer: "" });
+      toast({ title: "FAQ added" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setAddingFaq(false);
+    }
+  };
+
+  const deleteFaq = async (faqId: string) => {
+    try {
+      const { error } = await supabase.from("business_faqs").delete().eq("id", faqId);
+      if (error) throw error;
+      setFaqs(faqs.filter((f) => f.id !== faqId));
+      toast({ title: "FAQ deleted" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  };
+
+  const saveInstructions = async () => {
+    setSavingInstructions(true);
+    try {
+      const { error } = await supabase
+        .from("business_custom_instructions")
+        .upsert({
+          business_id: id,
+          instructions: customInstructions,
+        }, { onConflict: "business_id" });
+
+      if (error) throw error;
+      toast({ title: "Custom instructions saved" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setSavingInstructions(false);
+    }
+  };
+
+  if (loading || loadingData) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <Skeleton className="h-10 w-48" />
+          <Skeleton className="h-96" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!business) return null;
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/businesses")}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-display font-bold">{business.name}</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage your business chatbot settings
+            </p>
+          </div>
+        </div>
+
+        <Tabs defaultValue="hours" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="hours">Business Hours</TabsTrigger>
+            <TabsTrigger value="services">Services</TabsTrigger>
+            <TabsTrigger value="faqs">FAQs</TabsTrigger>
+            <TabsTrigger value="instructions">Custom Instructions</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="hours">
+            <Card>
+              <CardHeader>
+                <CardTitle>Business Hours</CardTitle>
+                <CardDescription>Set your operating hours for each day of the week</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {hours.map((hour, index) => (
+                  <div key={hour.day_of_week} className="flex items-center gap-4">
+                    <div className="w-28 font-medium">{dayNames[hour.day_of_week]}</div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={!hour.is_closed}
+                        onCheckedChange={(checked) => {
+                          const newHours = [...hours];
+                          newHours[index].is_closed = !checked;
+                          setHours(newHours);
+                        }}
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {hour.is_closed ? "Closed" : "Open"}
+                      </span>
+                    </div>
+                    {!hour.is_closed && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="time"
+                          value={hour.open_time || "09:00"}
+                          onChange={(e) => {
+                            const newHours = [...hours];
+                            newHours[index].open_time = e.target.value;
+                            setHours(newHours);
+                          }}
+                          className="w-32"
+                        />
+                        <span>to</span>
+                        <Input
+                          type="time"
+                          value={hour.close_time || "17:00"}
+                          onChange={(e) => {
+                            const newHours = [...hours];
+                            newHours[index].close_time = e.target.value;
+                            setHours(newHours);
+                          }}
+                          className="w-32"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <Button onClick={saveHours} disabled={savingHours} className="mt-4">
+                  {savingHours ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Save Hours
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="services">
+            <Card>
+              <CardHeader>
+                <CardTitle>Services</CardTitle>
+                <CardDescription>List the services your business offers</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Input
+                    placeholder="Service name"
+                    value={newService.name}
+                    onChange={(e) => setNewService({ ...newService, name: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Description (optional)"
+                    value={newService.description}
+                    onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+                  />
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Price (optional)"
+                      value={newService.price}
+                      onChange={(e) => setNewService({ ...newService, price: e.target.value })}
+                    />
+                    <Button onClick={addService} disabled={addingService || !newService.name.trim()}>
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {services.map((service) => (
+                    <div key={service.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{service.name}</p>
+                        {service.description && (
+                          <p className="text-sm text-muted-foreground">{service.description}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {service.price && (
+                          <span className="text-sm font-medium text-primary">{service.price}</span>
+                        )}
+                        <Button variant="ghost" size="icon" onClick={() => deleteService(service.id)}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {services.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">No services added yet</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="faqs">
+            <Card>
+              <CardHeader>
+                <CardTitle>FAQs</CardTitle>
+                <CardDescription>Add frequently asked questions to train your chatbot</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Question"
+                    value={newFaq.question}
+                    onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
+                  />
+                  <Textarea
+                    placeholder="Answer"
+                    value={newFaq.answer}
+                    onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
+                    rows={3}
+                  />
+                  <Button
+                    onClick={addFaq}
+                    disabled={addingFaq || !newFaq.question.trim() || !newFaq.answer.trim()}
+                    className="gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add FAQ
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {faqs.map((faq) => (
+                    <div key={faq.id} className="p-3 border rounded-lg">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium">Q: {faq.question}</p>
+                          <p className="text-sm text-muted-foreground mt-1">A: {faq.answer}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => deleteFaq(faq.id)}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {faqs.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">No FAQs added yet</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="instructions">
+            <Card>
+              <CardHeader>
+                <CardTitle>Custom Instructions</CardTitle>
+                <CardDescription>
+                  Add special instructions for how your chatbot should behave
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Textarea
+                  placeholder="E.g., Always greet customers warmly, focus on promoting our premium services, avoid discussing competitor pricing..."
+                  value={customInstructions}
+                  onChange={(e) => setCustomInstructions(e.target.value)}
+                  rows={6}
+                />
+                <Button onClick={saveInstructions} disabled={savingInstructions}>
+                  {savingInstructions ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save Instructions
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </DashboardLayout>
+  );
+}
