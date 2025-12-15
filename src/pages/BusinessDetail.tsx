@@ -9,30 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Save, Loader2, Clock, HelpCircle, Brain, Briefcase } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Loader2, HelpCircle, Database, Palette, FileText, Globe, Upload } from "lucide-react";
 
 interface Business {
   id: string;
   name: string;
   description: string | null;
-}
-
-interface BusinessHour {
-  id?: string;
-  day_of_week: number;
-  open_time: string | null;
-  close_time: string | null;
-  is_closed: boolean;
-}
-
-interface Service {
-  id: string;
-  name: string;
-  description: string | null;
-  price: string | null;
 }
 
 interface FAQ {
@@ -41,7 +25,23 @@ interface FAQ {
   answer: string;
 }
 
-const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+interface KnowledgeItem {
+  id: string;
+  type: "text" | "website" | "file";
+  title: string;
+  content: string | null;
+  url: string | null;
+  file_name: string | null;
+}
+
+interface ChatbotStyle {
+  primary_color: string;
+  background_color: string;
+  text_color: string;
+  border_radius: string;
+  position: string;
+  avatar_url: string | null;
+}
 
 export default function BusinessDetail() {
   const { id } = useParams<{ id: string }>();
@@ -50,18 +50,24 @@ export default function BusinessDetail() {
   const { toast } = useToast();
 
   const [business, setBusiness] = useState<Business | null>(null);
-  const [hours, setHours] = useState<BusinessHour[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
   const [faqs, setFaqs] = useState<FAQ[]>([]);
-  const [customInstructions, setCustomInstructions] = useState("");
+  const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
+  const [styles, setStyles] = useState<ChatbotStyle>({
+    primary_color: "#6366f1",
+    background_color: "#ffffff",
+    text_color: "#1f2937",
+    border_radius: "rounded",
+    position: "bottom-right",
+    avatar_url: null,
+  });
   const [loadingData, setLoadingData] = useState(true);
-  const [savingHours, setSavingHours] = useState(false);
-  const [savingInstructions, setSavingInstructions] = useState(false);
+  const [savingStyles, setSavingStyles] = useState(false);
 
-  const [newService, setNewService] = useState({ name: "", description: "", price: "" });
   const [newFaq, setNewFaq] = useState({ question: "", answer: "" });
-  const [addingService, setAddingService] = useState(false);
   const [addingFaq, setAddingFaq] = useState(false);
+
+  const [newKnowledge, setNewKnowledge] = useState<{ type: "text" | "website" | "file"; title: string; content: string; url: string }>({ type: "text", title: "", content: "", url: "" });
+  const [addingKnowledge, setAddingKnowledge] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -77,12 +83,11 @@ export default function BusinessDetail() {
 
   const fetchData = async () => {
     try {
-      const [businessResult, hoursResult, servicesResult, faqsResult, instructionsResult] = await Promise.all([
+      const [businessResult, faqsResult, knowledgeResult, stylesResult] = await Promise.all([
         supabase.from("businesses").select("id, name, description").eq("id", id).single(),
-        supabase.from("business_hours").select("*").eq("business_id", id).order("day_of_week"),
-        supabase.from("business_services").select("*").eq("business_id", id).order("created_at"),
         supabase.from("business_faqs").select("*").eq("business_id", id).order("created_at"),
-        supabase.from("business_custom_instructions").select("*").eq("business_id", id).single(),
+        supabase.from("knowledge_base").select("*").eq("business_id", id).order("created_at"),
+        supabase.from("chatbot_styles").select("*").eq("business_id", id).single(),
       ]);
 
       if (businessResult.error || !businessResult.data) {
@@ -91,84 +96,23 @@ export default function BusinessDetail() {
       }
 
       setBusiness(businessResult.data);
-
-      const existingHours = hoursResult.data || [];
-      const allHours: BusinessHour[] = [];
-      for (let i = 0; i < 7; i++) {
-        const existing = existingHours.find((h: any) => h.day_of_week === i);
-        allHours.push(existing || { day_of_week: i, open_time: "09:00", close_time: "17:00", is_closed: false });
-      }
-      setHours(allHours);
-
-      setServices(servicesResult.data || []);
       setFaqs(faqsResult.data || []);
-      setCustomInstructions(instructionsResult.data?.instructions || "");
+      setKnowledge((knowledgeResult.data || []) as KnowledgeItem[]);
+      
+      if (stylesResult.data) {
+        setStyles({
+          primary_color: stylesResult.data.primary_color || "#6366f1",
+          background_color: stylesResult.data.background_color || "#ffffff",
+          text_color: stylesResult.data.text_color || "#1f2937",
+          border_radius: stylesResult.data.border_radius || "rounded",
+          position: stylesResult.data.position || "bottom-right",
+          avatar_url: stylesResult.data.avatar_url,
+        });
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
       setLoadingData(false);
-    }
-  };
-
-  const saveHours = async () => {
-    setSavingHours(true);
-    try {
-      await supabase.from("business_hours").delete().eq("business_id", id);
-
-      const { error } = await supabase.from("business_hours").insert(
-        hours.map((h) => ({
-          business_id: id,
-          day_of_week: h.day_of_week,
-          open_time: h.is_closed ? null : h.open_time,
-          close_time: h.is_closed ? null : h.close_time,
-          is_closed: h.is_closed,
-        }))
-      );
-
-      if (error) throw error;
-      toast({ title: "Business hours saved" });
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
-    } finally {
-      setSavingHours(false);
-    }
-  };
-
-  const addService = async () => {
-    if (!newService.name.trim()) return;
-    setAddingService(true);
-
-    try {
-      const { data, error } = await supabase
-        .from("business_services")
-        .insert({
-          business_id: id,
-          name: newService.name,
-          description: newService.description || null,
-          price: newService.price || null,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      setServices([...services, data]);
-      setNewService({ name: "", description: "", price: "" });
-      toast({ title: "Service added" });
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
-    } finally {
-      setAddingService(false);
-    }
-  };
-
-  const deleteService = async (serviceId: string) => {
-    try {
-      const { error } = await supabase.from("business_services").delete().eq("id", serviceId);
-      if (error) throw error;
-      setServices(services.filter((s) => s.id !== serviceId));
-      toast({ title: "Service deleted" });
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
     }
   };
 
@@ -209,22 +153,61 @@ export default function BusinessDetail() {
     }
   };
 
-  const saveInstructions = async () => {
-    setSavingInstructions(true);
+  const addKnowledge = async () => {
+    if (!newKnowledge.title.trim()) return;
+    setAddingKnowledge(true);
+
     try {
-      const { error } = await supabase
-        .from("business_custom_instructions")
-        .upsert({
+      const { data, error } = await supabase
+        .from("knowledge_base")
+        .insert({
           business_id: id,
-          instructions: customInstructions,
-        }, { onConflict: "business_id" });
+          type: newKnowledge.type,
+          title: newKnowledge.title,
+          content: newKnowledge.type === "text" ? newKnowledge.content : null,
+          url: newKnowledge.type === "website" ? newKnowledge.url : null,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
-      toast({ title: "AI instructions saved" });
+      setKnowledge([...knowledge, data as KnowledgeItem]);
+      setNewKnowledge({ type: "text", title: "", content: "", url: "" });
+      toast({ title: "Knowledge added" });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
-      setSavingInstructions(false);
+      setAddingKnowledge(false);
+    }
+  };
+
+  const deleteKnowledge = async (itemId: string) => {
+    try {
+      const { error } = await supabase.from("knowledge_base").delete().eq("id", itemId);
+      if (error) throw error;
+      setKnowledge(knowledge.filter((k) => k.id !== itemId));
+      toast({ title: "Knowledge deleted" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  };
+
+  const saveStyles = async () => {
+    setSavingStyles(true);
+    try {
+      const { error } = await supabase
+        .from("chatbot_styles")
+        .upsert({
+          business_id: id,
+          ...styles,
+        }, { onConflict: "business_id" });
+
+      if (error) throw error;
+      toast({ title: "Styles saved" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setSavingStyles(false);
     }
   };
 
@@ -232,8 +215,8 @@ export default function BusinessDetail() {
     return (
       <DashboardLayout>
         <div className="space-y-6">
-          <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-96 rounded-2xl" />
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-96" />
         </div>
       </DashboardLayout>
     );
@@ -243,249 +226,312 @@ export default function BusinessDetail() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8 animate-fade-in">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/businesses")} className="rounded-xl">
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/businesses")} className="h-8 w-8">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">{business.name}</h1>
-            <p className="text-muted-foreground mt-1">
-              Configure your AI chatbot's knowledge and behavior
-            </p>
+            <h1 className="text-xl font-semibold">{business.name}</h1>
+            <p className="text-sm text-muted-foreground">Configure your chatbot</p>
           </div>
         </div>
 
-        <Tabs defaultValue="hours" className="space-y-6">
-          <TabsList className="bg-muted/50 p-1 rounded-xl">
-            <TabsTrigger value="hours" className="gap-2 rounded-lg data-[state=active]:shadow-md">
-              <Clock className="w-4 h-4" />
-              Hours
-            </TabsTrigger>
-            <TabsTrigger value="services" className="gap-2 rounded-lg data-[state=active]:shadow-md">
-              <Briefcase className="w-4 h-4" />
-              Services
-            </TabsTrigger>
-            <TabsTrigger value="faqs" className="gap-2 rounded-lg data-[state=active]:shadow-md">
+        <Tabs defaultValue="faqs" className="space-y-4">
+          <TabsList className="bg-muted/50 p-1">
+            <TabsTrigger value="faqs" className="gap-2 text-sm">
               <HelpCircle className="w-4 h-4" />
               FAQs
             </TabsTrigger>
-            <TabsTrigger value="instructions" className="gap-2 rounded-lg data-[state=active]:shadow-md">
-              <Brain className="w-4 h-4" />
-              AI Memory
+            <TabsTrigger value="database" className="gap-2 text-sm">
+              <Database className="w-4 h-4" />
+              Database
+            </TabsTrigger>
+            <TabsTrigger value="styles" className="gap-2 text-sm">
+              <Palette className="w-4 h-4" />
+              Styles
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="hours">
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-primary" />
-                  Business Hours
-                </CardTitle>
-                <CardDescription>Set your operating hours - the AI will inform customers accordingly</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {hours.map((hour, index) => (
-                  <div key={hour.day_of_week} className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
-                    <div className="w-28 font-medium">{dayNames[hour.day_of_week]}</div>
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        checked={!hour.is_closed}
-                        onCheckedChange={(checked) => {
-                          const newHours = [...hours];
-                          newHours[index].is_closed = !checked;
-                          setHours(newHours);
-                        }}
-                      />
-                      <span className={`text-sm ${hour.is_closed ? 'text-destructive' : 'text-green-600'}`}>
-                        {hour.is_closed ? "Closed" : "Open"}
-                      </span>
-                    </div>
-                    {!hour.is_closed && (
-                      <div className="flex items-center gap-2 ml-auto">
-                        <Input
-                          type="time"
-                          value={hour.open_time || "09:00"}
-                          onChange={(e) => {
-                            const newHours = [...hours];
-                            newHours[index].open_time = e.target.value;
-                            setHours(newHours);
-                          }}
-                          className="w-32"
-                        />
-                        <span className="text-muted-foreground">to</span>
-                        <Input
-                          type="time"
-                          value={hour.close_time || "17:00"}
-                          onChange={(e) => {
-                            const newHours = [...hours];
-                            newHours[index].close_time = e.target.value;
-                            setHours(newHours);
-                          }}
-                          className="w-32"
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <Button onClick={saveHours} disabled={savingHours} className="mt-4 gradient-primary border-0">
-                  {savingHours ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                  Save Hours
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="services">
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Briefcase className="w-5 h-5 text-primary" />
-                  Services & Products
-                </CardTitle>
-                <CardDescription>Add your services - the AI will use this to answer customer questions</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-4 p-4 rounded-xl bg-muted/30">
-                  <Input
-                    placeholder="Service name"
-                    value={newService.name}
-                    onChange={(e) => setNewService({ ...newService, name: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Description (optional)"
-                    value={newService.description}
-                    onChange={(e) => setNewService({ ...newService, description: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Price (optional)"
-                    value={newService.price}
-                    onChange={(e) => setNewService({ ...newService, price: e.target.value })}
-                  />
-                  <Button onClick={addService} disabled={addingService || !newService.name.trim()} className="gradient-primary border-0">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add
-                  </Button>
-                </div>
-
-                <div className="space-y-3">
-                  {services.map((service) => (
-                    <div key={service.id} className="flex items-center justify-between p-4 rounded-xl bg-card border hover:border-primary/30 transition-colors">
-                      <div>
-                        <p className="font-medium">{service.name}</p>
-                        {service.description && (
-                          <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {service.price && (
-                          <span className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full">{service.price}</span>
-                        )}
-                        <Button variant="ghost" size="icon" onClick={() => deleteService(service.id)} className="text-destructive hover:text-destructive rounded-lg">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  {services.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">No services added yet</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
+          {/* FAQs Tab */}
           <TabsContent value="faqs">
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <HelpCircle className="w-5 h-5 text-primary" />
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-primary" />
                   Frequently Asked Questions
                 </CardTitle>
-                <CardDescription>Train your AI with common questions and answers</CardDescription>
+                <CardDescription className="text-sm">Add questions that appear as suggestions in the chat</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4 p-4 rounded-xl bg-muted/30">
+              <CardContent className="space-y-4">
+                <div className="space-y-3 p-4 rounded-lg bg-muted/30 border border-border/50">
                   <Input
-                    placeholder="Question (e.g., What are your prices?)"
+                    placeholder="Question"
                     value={newFaq.question}
                     onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
+                    className="bg-background"
                   />
                   <Textarea
-                    placeholder="Answer (be detailed for better AI responses)"
+                    placeholder="Answer"
                     value={newFaq.answer}
                     onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
-                    rows={3}
+                    rows={2}
+                    className="bg-background"
                   />
                   <Button
                     onClick={addFaq}
                     disabled={addingFaq || !newFaq.question.trim() || !newFaq.answer.trim()}
-                    className="gap-2 gradient-primary border-0"
+                    size="sm"
+                    className="gap-2"
                   >
                     <Plus className="w-4 h-4" />
                     Add FAQ
                   </Button>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {faqs.map((faq) => (
-                    <div key={faq.id} className="p-4 rounded-xl bg-card border hover:border-primary/30 transition-colors">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="font-medium text-primary">Q: {faq.question}</p>
-                          <p className="text-muted-foreground mt-2">A: {faq.answer}</p>
+                    <div key={faq.id} className="p-3 rounded-lg border border-border/50 bg-card">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-primary">{faq.question}</p>
+                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{faq.answer}</p>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => deleteFaq(faq.id)} className="text-destructive hover:text-destructive rounded-lg ml-4">
+                        <Button variant="ghost" size="icon" onClick={() => deleteFaq(faq.id)} className="text-destructive hover:text-destructive h-8 w-8 shrink-0">
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
                   ))}
                   {faqs.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">No FAQs added yet</p>
+                    <p className="text-center text-muted-foreground py-6 text-sm">No FAQs added yet</p>
                   )}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="instructions">
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Brain className="w-5 h-5 text-primary" />
-                  AI Memory & Instructions
+          {/* Database Tab */}
+          <TabsContent value="database">
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Database className="w-4 h-4 text-primary" />
+                  Knowledge Base
                 </CardTitle>
-                <CardDescription>
-                  Provide custom instructions for your AI - this is the AI's "memory" that guides its behavior
-                </CardDescription>
+                <CardDescription className="text-sm">Add content for your AI to reference</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Textarea
-                  placeholder="Examples:
-• Always greet customers warmly with their name if known
-• Focus on promoting our premium services
-• Avoid discussing competitor pricing
-• If asked about refunds, explain our 30-day policy
-• Use a friendly, professional tone
-• Remember that our biggest sale is in December
-• Our CEO's name is John Smith"
-                  value={customInstructions}
-                  onChange={(e) => setCustomInstructions(e.target.value)}
-                  rows={10}
-                  className="resize-none font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  💡 Tip: Be specific! The more details you provide, the smarter your AI becomes.
-                </p>
-                <Button onClick={saveInstructions} disabled={savingInstructions} className="gradient-primary border-0">
-                  {savingInstructions ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
+                <div className="space-y-3 p-4 rounded-lg bg-muted/30 border border-border/50">
+                  <div className="flex gap-2">
+                    <Button
+                      variant={newKnowledge.type === "text" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setNewKnowledge({ ...newKnowledge, type: "text" })}
+                      className="gap-2"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Text
+                    </Button>
+                    <Button
+                      variant={newKnowledge.type === "website" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setNewKnowledge({ ...newKnowledge, type: "website" })}
+                      className="gap-2"
+                    >
+                      <Globe className="w-4 h-4" />
+                      Website
+                    </Button>
+                    <Button
+                      variant={newKnowledge.type === "file" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setNewKnowledge({ ...newKnowledge, type: "file" })}
+                      className="gap-2"
+                      disabled
+                    >
+                      <Upload className="w-4 h-4" />
+                      File
+                    </Button>
+                  </div>
+                  <Input
+                    placeholder="Title"
+                    value={newKnowledge.title}
+                    onChange={(e) => setNewKnowledge({ ...newKnowledge, title: e.target.value })}
+                    className="bg-background"
+                  />
+                  {newKnowledge.type === "text" && (
+                    <Textarea
+                      placeholder="Enter your knowledge content..."
+                      value={newKnowledge.content}
+                      onChange={(e) => setNewKnowledge({ ...newKnowledge, content: e.target.value })}
+                      rows={4}
+                      className="bg-background"
+                    />
                   )}
-                  Save AI Instructions
+                  {newKnowledge.type === "website" && (
+                    <Input
+                      placeholder="https://example.com"
+                      value={newKnowledge.url}
+                      onChange={(e) => setNewKnowledge({ ...newKnowledge, url: e.target.value })}
+                      className="bg-background"
+                    />
+                  )}
+                  <Button
+                    onClick={addKnowledge}
+                    disabled={addingKnowledge || !newKnowledge.title.trim()}
+                    size="sm"
+                    className="gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Knowledge
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {knowledge.map((item) => (
+                    <div key={item.id} className="p-3 rounded-lg border border-border/50 bg-card">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                            {item.type === "text" && <FileText className="w-4 h-4 text-primary" />}
+                            {item.type === "website" && <Globe className="w-4 h-4 text-primary" />}
+                            {item.type === "file" && <Upload className="w-4 h-4 text-primary" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm">{item.title}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{item.type}</p>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => deleteKnowledge(item.id)} className="text-destructive hover:text-destructive h-8 w-8 shrink-0">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {knowledge.length === 0 && (
+                    <p className="text-center text-muted-foreground py-6 text-sm">No knowledge added yet</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Styles Tab */}
+          <TabsContent value="styles">
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-primary" />
+                  Widget Appearance
+                </CardTitle>
+                <CardDescription className="text-sm">Customize how your chatbot looks</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Primary Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={styles.primary_color}
+                        onChange={(e) => setStyles({ ...styles, primary_color: e.target.value })}
+                        className="w-12 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={styles.primary_color}
+                        onChange={(e) => setStyles({ ...styles, primary_color: e.target.value })}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Background Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={styles.background_color}
+                        onChange={(e) => setStyles({ ...styles, background_color: e.target.value })}
+                        className="w-12 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={styles.background_color}
+                        onChange={(e) => setStyles({ ...styles, background_color: e.target.value })}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Text Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={styles.text_color}
+                        onChange={(e) => setStyles({ ...styles, text_color: e.target.value })}
+                        className="w-12 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={styles.text_color}
+                        onChange={(e) => setStyles({ ...styles, text_color: e.target.value })}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Avatar URL</Label>
+                    <Input
+                      placeholder="https://example.com/avatar.png"
+                      value={styles.avatar_url || ""}
+                      onChange={(e) => setStyles({ ...styles, avatar_url: e.target.value || null })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Corner Style</Label>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={styles.border_radius === "rounded" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setStyles({ ...styles, border_radius: "rounded" })}
+                      >
+                        Rounded
+                      </Button>
+                      <Button
+                        variant={styles.border_radius === "square" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setStyles({ ...styles, border_radius: "square" })}
+                      >
+                        Square
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Position</Label>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={styles.position === "bottom-right" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setStyles({ ...styles, position: "bottom-right" })}
+                      >
+                        Right
+                      </Button>
+                      <Button
+                        variant={styles.position === "bottom-left" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setStyles({ ...styles, position: "bottom-left" })}
+                      >
+                        Left
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <Button onClick={saveStyles} disabled={savingStyles} className="gap-2 mt-4">
+                  {savingStyles ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Styles
                 </Button>
               </CardContent>
             </Card>
