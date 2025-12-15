@@ -85,18 +85,20 @@ serve(async (req) => {
       );
     }
 
-    // Fetch additional business data
-    const [hoursResult, servicesResult, faqsResult, instructionsResult] = await Promise.all([
+    // Fetch additional business data including knowledge base
+    const [hoursResult, servicesResult, faqsResult, instructionsResult, knowledgeResult] = await Promise.all([
       supabase.from("business_hours").select("*").eq("business_id", businessId),
       supabase.from("business_services").select("*").eq("business_id", businessId),
       supabase.from("business_faqs").select("*").eq("business_id", businessId),
       supabase.from("business_custom_instructions").select("*").eq("business_id", businessId).single(),
+      supabase.from("knowledge_base").select("*").eq("business_id", businessId),
     ]);
 
     const hours = hoursResult.data || [];
     const services = servicesResult.data || [];
     const faqs = faqsResult.data || [];
     const customInstructions = instructionsResult.data?.instructions || "";
+    const knowledgeBase = knowledgeResult.data || [];
 
     // Build system prompt with AI memory context
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -111,6 +113,18 @@ serve(async (req) => {
 
     const faqsText = faqs.map((f: any) => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n");
 
+    // Build knowledge base text
+    const knowledgeText = knowledgeBase.map((k: any) => {
+      if (k.type === "text") {
+        return `### ${k.title}\n${k.content}`;
+      } else if (k.type === "website") {
+        return `### ${k.title} (Website: ${k.url})\n${k.content || ""}`;
+      } else if (k.type === "file") {
+        return `### ${k.title} (File: ${k.file_name})\n${k.content || ""}`;
+      }
+      return "";
+    }).filter(Boolean).join("\n\n");
+
     const systemPrompt = `You are a helpful, friendly, and professional AI assistant for ${business.name}. You have been trained with comprehensive knowledge about this business and should provide accurate, helpful responses.
 
 ## Business Profile
@@ -122,6 +136,8 @@ ${hoursText ? `## Operating Hours\n${hoursText}` : ""}
 ${servicesText ? `## Services & Products\n${servicesText}` : ""}
 
 ${faqsText ? `## Knowledge Base (FAQ)\n${faqsText}` : ""}
+
+${knowledgeText ? `## Additional Knowledge\n${knowledgeText}` : ""}
 
 ${customInstructions ? `## Special Instructions & AI Memory\n${customInstructions}` : ""}
 

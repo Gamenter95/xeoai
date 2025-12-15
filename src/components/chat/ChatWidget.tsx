@@ -8,14 +8,22 @@ interface Message {
   content: string;
 }
 
+interface FAQ {
+  id: string;
+  question: string;
+}
+
 interface ChatWidgetProps {
   businessId: string;
   businessName?: string;
   businessDescription?: string;
   businessAvatar?: string;
   primaryColor?: string;
+  backgroundColor?: string;
+  textColor?: string;
   position?: "bottom-right" | "bottom-left";
   borderRadius?: "rounded" | "square";
+  faqs?: FAQ[];
 }
 
 export default function ChatWidget({ 
@@ -23,9 +31,12 @@ export default function ChatWidget({
   businessName = "AI Assistant", 
   businessDescription,
   businessAvatar,
-  primaryColor = "#7c3aed",
+  primaryColor = "#6366f1",
+  backgroundColor = "#ffffff",
+  textColor = "#1f2937",
   position = "bottom-right",
-  borderRadius = "rounded"
+  borderRadius = "rounded",
+  faqs = []
 }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -35,26 +46,20 @@ export default function ChatWidget({
   const [sessionId] = useState(() => crypto.randomUUID());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const positionClasses = position === "bottom-right" 
-    ? "right-6" 
-    : "left-6";
-
-  const radiusClasses = borderRadius === "rounded" 
-    ? "rounded-2xl" 
-    : "rounded-lg";
-
-  const widgetRadiusClasses = borderRadius === "rounded"
-    ? "rounded-3xl"
-    : "rounded-xl";
+  const positionClasses = position === "bottom-right" ? "right-6" : "left-6";
+  const radiusClasses = borderRadius === "rounded" ? "rounded-2xl" : "rounded-lg";
+  const widgetRadiusClasses = borderRadius === "rounded" ? "rounded-2xl" : "rounded-xl";
+  const buttonRadius = borderRadius === "rounded" ? "rounded-full" : "rounded-xl";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+  const sendMessage = async (messageText?: string) => {
+    const text = messageText || input.trim();
+    if (!text || isLoading) return;
 
-    const userMessage: Message = { role: "user", content: input.trim() };
+    const userMessage: Message = { role: "user", content: text };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
@@ -122,19 +127,20 @@ export default function ChatWidget({
     }
   };
 
-  const Avatar = () => {
+  const Avatar = ({ size = "md" }: { size?: "sm" | "md" }) => {
+    const sizeClasses = size === "sm" ? "w-7 h-7 text-xs" : "w-9 h-9 text-sm";
     if (businessAvatar) {
       return (
         <img 
           src={businessAvatar} 
           alt={businessName} 
-          className={`w-10 h-10 ${radiusClasses} object-cover`}
+          className={`${sizeClasses} ${radiusClasses} object-cover`}
         />
       );
     }
     return (
       <div 
-        className={`w-10 h-10 ${radiusClasses} flex items-center justify-center text-white font-semibold text-sm`}
+        className={`${sizeClasses} ${radiusClasses} flex items-center justify-center text-white font-medium`}
         style={{ backgroundColor: primaryColor }}
       >
         {businessName.charAt(0).toUpperCase()}
@@ -151,44 +157,38 @@ export default function ChatWidget({
           setIsMinimized(false);
         }}
         className={`
-          fixed bottom-6 ${positionClasses} w-14 h-14 ${radiusClasses}
+          fixed bottom-6 ${positionClasses} w-14 h-14 ${buttonRadius}
           shadow-lg flex items-center justify-center 
           text-white z-50 transition-all duration-200
           hover:scale-105 hover:shadow-xl
         `}
         style={{ backgroundColor: primaryColor }}
       >
-        {isOpen ? (
-          <X className="w-5 h-5" />
-        ) : (
-          <MessageSquare className="w-5 h-5" />
-        )}
+        {isOpen ? <X className="w-5 h-5" /> : <MessageSquare className="w-5 h-5" />}
       </button>
 
       {/* Chat Window */}
       {isOpen && !isMinimized && (
         <div 
           className={`
-            fixed bottom-24 ${positionClasses} w-[380px] h-[520px] 
-            bg-card border border-border ${widgetRadiusClasses}
-            shadow-2xl flex flex-col z-50 overflow-hidden
-            animate-scale-in
+            fixed bottom-24 ${positionClasses} w-[360px] h-[500px] 
+            border shadow-2xl flex flex-col z-50 overflow-hidden
+            animate-scale-in ${widgetRadiusClasses}
           `}
+          style={{ backgroundColor, borderColor: `${primaryColor}20` }}
         >
           {/* Header */}
           <div 
-            className="p-4 flex items-center gap-3"
+            className="px-4 py-3 flex items-center gap-3"
             style={{ backgroundColor: primaryColor }}
           >
             <div className="relative">
               <Avatar />
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
             </div>
             <div className="flex-1 text-white min-w-0">
-              <p className="font-semibold text-base truncate">{businessName}</p>
-              <p className="text-xs opacity-90 truncate">
-                {businessDescription || "Online"}
-              </p>
+              <p className="font-semibold text-sm truncate">{businessName}</p>
+              <p className="text-xs opacity-80 truncate">{businessDescription || "Online"}</p>
             </div>
             <Button
               variant="ghost"
@@ -201,17 +201,20 @@ export default function ChatWidget({
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
+          <div 
+            className="flex-1 overflow-y-auto p-4 space-y-3"
+            style={{ backgroundColor: `${backgroundColor}` }}
+          >
             {messages.length === 0 && (
-              <div className="text-center py-8">
+              <div className="text-center py-6">
                 <div 
-                  className={`w-14 h-14 ${radiusClasses} mx-auto mb-3 flex items-center justify-center text-white`}
+                  className={`w-12 h-12 ${radiusClasses} mx-auto mb-3 flex items-center justify-center text-white`}
                   style={{ backgroundColor: primaryColor }}
                 >
-                  <MessageSquare className="w-6 h-6" />
+                  <MessageSquare className="w-5 h-5" />
                 </div>
-                <h3 className="font-semibold text-base mb-1">Hello!</h3>
-                <p className="text-muted-foreground text-sm max-w-[240px] mx-auto">
+                <h3 className="font-semibold text-sm mb-1" style={{ color: textColor }}>Hello!</h3>
+                <p className="text-xs max-w-[200px] mx-auto" style={{ color: `${textColor}80` }}>
                   How can I help you today?
                 </p>
               </div>
@@ -221,58 +224,41 @@ export default function ChatWidget({
                 key={i} 
                 className={`flex items-end gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                {msg.role === "assistant" && (
-                  <div className="shrink-0">
-                    {businessAvatar ? (
-                      <img 
-                        src={businessAvatar} 
-                        alt={businessName} 
-                        className={`w-7 h-7 ${radiusClasses} object-cover`}
-                      />
-                    ) : (
-                      <div 
-                        className={`w-7 h-7 ${radiusClasses} flex items-center justify-center text-white text-xs font-semibold`}
-                        style={{ backgroundColor: primaryColor }}
-                      >
-                        {businessName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {msg.role === "assistant" && <Avatar size="sm" />}
                 <div
                   className={`
-                    max-w-[75%] px-3.5 py-2.5 text-sm leading-relaxed
+                    max-w-[75%] px-3 py-2 text-sm leading-relaxed
                     ${msg.role === "user"
                       ? `text-white ${radiusClasses} rounded-br-sm`
-                      : `bg-card border border-border text-foreground ${radiusClasses} rounded-bl-sm`
+                      : `${radiusClasses} rounded-bl-sm border`
                     }
                   `}
-                  style={msg.role === "user" ? { backgroundColor: primaryColor } : undefined}
+                  style={
+                    msg.role === "user" 
+                      ? { backgroundColor: primaryColor } 
+                      : { backgroundColor, color: textColor, borderColor: `${primaryColor}20` }
+                  }
                 >
                   {msg.content}
                 </div>
                 {msg.role === "user" && (
-                  <div className="shrink-0">
-                    <div className={`w-7 h-7 ${radiusClasses} bg-muted flex items-center justify-center`}>
-                      <User className="w-3.5 h-3.5 text-muted-foreground" />
-                    </div>
+                  <div className={`w-7 h-7 ${radiusClasses} flex items-center justify-center`} style={{ backgroundColor: `${primaryColor}15` }}>
+                    <User className="w-3.5 h-3.5" style={{ color: primaryColor }} />
                   </div>
                 )}
               </div>
             ))}
             {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="flex items-end gap-2 justify-start">
+                <Avatar size="sm" />
                 <div 
-                  className={`w-7 h-7 ${radiusClasses} flex items-center justify-center text-white text-xs font-semibold`}
-                  style={{ backgroundColor: primaryColor }}
+                  className={`px-4 py-3 ${radiusClasses} rounded-bl-sm border`}
+                  style={{ backgroundColor, borderColor: `${primaryColor}20` }}
                 >
-                  {businessName.charAt(0).toUpperCase()}
-                </div>
-                <div className={`bg-card border border-border px-4 py-3 ${radiusClasses} rounded-bl-sm`}>
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: `${textColor}50`, animationDelay: "0ms" }} />
+                    <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: `${textColor}50`, animationDelay: "150ms" }} />
+                    <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: `${textColor}50`, animationDelay: "300ms" }} />
                   </div>
                 </div>
               </div>
@@ -280,8 +266,24 @@ export default function ChatWidget({
             <div ref={messagesEndRef} />
           </div>
 
+          {/* FAQ Suggestions */}
+          {faqs.length > 0 && messages.length === 0 && (
+            <div className="px-3 pb-2 flex gap-2 overflow-x-auto" style={{ backgroundColor }}>
+              {faqs.slice(0, 3).map((faq) => (
+                <button
+                  key={faq.id}
+                  onClick={() => sendMessage(faq.question)}
+                  className="shrink-0 px-3 py-1.5 text-xs border rounded-full hover:opacity-80 transition-opacity truncate max-w-[140px]"
+                  style={{ borderColor: `${primaryColor}30`, color: primaryColor }}
+                >
+                  {faq.question}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Input */}
-          <div className="p-3 border-t border-border bg-card">
+          <div className="p-3 border-t" style={{ backgroundColor, borderColor: `${primaryColor}15` }}>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -294,20 +296,21 @@ export default function ChatWidget({
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Type a message..."
                 disabled={isLoading}
-                className={`flex-1 h-10 ${radiusClasses} border-border/50 focus:border-primary bg-muted/50 text-sm`}
+                className={`flex-1 h-10 ${radiusClasses} text-sm border`}
+                style={{ 
+                  backgroundColor: `${primaryColor}08`, 
+                  borderColor: `${primaryColor}20`,
+                  color: textColor 
+                }}
               />
               <Button 
                 type="submit" 
                 size="icon" 
                 disabled={isLoading || !input.trim()}
-                className={`h-10 w-10 ${radiusClasses} border-0 transition-all`}
+                className={`h-10 w-10 ${buttonRadius} border-0 transition-all`}
                 style={{ backgroundColor: primaryColor }}
               >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </Button>
             </form>
           </div>
@@ -318,11 +321,11 @@ export default function ChatWidget({
       {isOpen && isMinimized && (
         <button
           onClick={() => setIsMinimized(false)}
-          className={`fixed bottom-24 ${positionClasses} px-4 py-2.5 ${radiusClasses} shadow-lg text-white z-50 flex items-center gap-2 hover:shadow-xl transition-all animate-scale-in text-sm`}
+          className={`fixed bottom-24 ${positionClasses} px-4 py-2 ${radiusClasses} shadow-lg text-white z-50 flex items-center gap-2 hover:shadow-xl transition-all animate-scale-in text-sm`}
           style={{ backgroundColor: primaryColor }}
         >
           <MessageSquare className="w-4 h-4" />
-          <span className="font-medium">Continue Chat</span>
+          <span className="font-medium">Continue</span>
           {messages.length > 0 && (
             <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
               {messages.length}

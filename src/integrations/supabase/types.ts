@@ -245,6 +245,94 @@ export type Database = {
           },
         ]
       }
+      chatbot_styles: {
+        Row: {
+          avatar_url: string | null
+          background_color: string | null
+          border_radius: string | null
+          business_id: string
+          created_at: string
+          id: string
+          position: string | null
+          primary_color: string | null
+          text_color: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          background_color?: string | null
+          border_radius?: string | null
+          business_id: string
+          created_at?: string
+          id?: string
+          position?: string | null
+          primary_color?: string | null
+          text_color?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          background_color?: string | null
+          border_radius?: string | null
+          business_id?: string
+          created_at?: string
+          id?: string
+          position?: string | null
+          primary_color?: string | null
+          text_color?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_styles_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_base: {
+        Row: {
+          business_id: string
+          content: string | null
+          created_at: string
+          file_name: string | null
+          id: string
+          title: string
+          type: string
+          url: string | null
+        }
+        Insert: {
+          business_id: string
+          content?: string | null
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          title: string
+          type: string
+          url?: string | null
+        }
+        Update: {
+          business_id?: string
+          content?: string | null
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          title?: string
+          type?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_base_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           created_at: string
