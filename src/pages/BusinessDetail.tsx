@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Save, Loader2, HelpCircle, Database, Palette, FileText, Globe, Upload } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Loader2, HelpCircle, Database, Palette, FileText, Globe, Eye, CheckCircle2 } from "lucide-react";
 
 interface Business {
   id: string;
@@ -66,7 +67,7 @@ export default function BusinessDetail() {
   const [newFaq, setNewFaq] = useState({ question: "", answer: "" });
   const [addingFaq, setAddingFaq] = useState(false);
 
-  const [newKnowledge, setNewKnowledge] = useState<{ type: "text" | "website" | "file"; title: string; content: string; url: string }>({ type: "text", title: "", content: "", url: "" });
+  const [newKnowledge, setNewKnowledge] = useState<{ type: "text" | "website"; title: string; content: string; url: string }>({ type: "text", title: "", content: "", url: "" });
   const [addingKnowledge, setAddingKnowledge] = useState(false);
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export default function BusinessDetail() {
         supabase.from("businesses").select("id, name, description").eq("id", id).single(),
         supabase.from("business_faqs").select("*").eq("business_id", id).order("created_at"),
         supabase.from("knowledge_base").select("*").eq("business_id", id).order("created_at"),
-        supabase.from("chatbot_styles").select("*").eq("business_id", id).single(),
+        supabase.from("chatbot_styles").select("*").eq("business_id", id).maybeSingle(),
       ]);
 
       if (businessResult.error || !businessResult.data) {
@@ -134,7 +135,7 @@ export default function BusinessDetail() {
       if (error) throw error;
       setFaqs([...faqs, data]);
       setNewFaq({ question: "", answer: "" });
-      toast({ title: "FAQ added" });
+      toast({ title: "FAQ added successfully" });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
@@ -155,6 +156,9 @@ export default function BusinessDetail() {
 
   const addKnowledge = async () => {
     if (!newKnowledge.title.trim()) return;
+    if (newKnowledge.type === "text" && !newKnowledge.content.trim()) return;
+    if (newKnowledge.type === "website" && !newKnowledge.url.trim()) return;
+    
     setAddingKnowledge(true);
 
     try {
@@ -173,7 +177,7 @@ export default function BusinessDetail() {
       if (error) throw error;
       setKnowledge([...knowledge, data as KnowledgeItem]);
       setNewKnowledge({ type: "text", title: "", content: "", url: "" });
-      toast({ title: "Knowledge added" });
+      toast({ title: "Knowledge added successfully" });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
@@ -195,17 +199,49 @@ export default function BusinessDetail() {
   const saveStyles = async () => {
     setSavingStyles(true);
     try {
-      const { error } = await supabase
+      // Check if styles already exist
+      const { data: existing } = await supabase
         .from("chatbot_styles")
-        .upsert({
-          business_id: id,
-          ...styles,
-        }, { onConflict: "business_id" });
+        .select("id")
+        .eq("business_id", id)
+        .maybeSingle();
+
+      let error;
+      if (existing) {
+        // Update existing
+        const result = await supabase
+          .from("chatbot_styles")
+          .update({
+            primary_color: styles.primary_color,
+            background_color: styles.background_color,
+            text_color: styles.text_color,
+            border_radius: styles.border_radius,
+            position: styles.position,
+            avatar_url: styles.avatar_url,
+          })
+          .eq("business_id", id);
+        error = result.error;
+      } else {
+        // Insert new
+        const result = await supabase
+          .from("chatbot_styles")
+          .insert({
+            business_id: id,
+            primary_color: styles.primary_color,
+            background_color: styles.background_color,
+            text_color: styles.text_color,
+            border_radius: styles.border_radius,
+            position: styles.position,
+            avatar_url: styles.avatar_url,
+          });
+        error = result.error;
+      }
 
       if (error) throw error;
-      toast({ title: "Styles saved" });
+      toast({ title: "Styles saved successfully" });
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
+      console.error("Save styles error:", error);
+      toast({ variant: "destructive", title: "Error saving styles", description: error.message });
     } finally {
       setSavingStyles(false);
     }
@@ -227,56 +263,71 @@ export default function BusinessDetail() {
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/businesses")} className="h-8 w-8">
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div>
-            <h1 className="text-xl font-semibold">{business.name}</h1>
-            <p className="text-sm text-muted-foreground">Configure your chatbot</p>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/businesses")} className="h-9 w-9 rounded-lg">
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <div>
+              <h1 className="text-xl font-semibold">{business.name}</h1>
+              <p className="text-sm text-muted-foreground">Configure your chatbot settings</p>
+            </div>
           </div>
+          <Button variant="outline" size="sm" asChild className="gap-2 rounded-lg">
+            <Link to={`/widget-preview/${id}`} target="_blank">
+              <Eye className="w-4 h-4" />
+              Preview
+            </Link>
+          </Button>
         </div>
 
-        <Tabs defaultValue="faqs" className="space-y-4">
-          <TabsList className="bg-muted/50 p-1">
-            <TabsTrigger value="faqs" className="gap-2 text-sm">
+        <Tabs defaultValue="faqs" className="space-y-5">
+          <TabsList className="bg-muted/50 p-1 h-11 rounded-xl">
+            <TabsTrigger value="faqs" className="gap-2 text-sm rounded-lg px-4">
               <HelpCircle className="w-4 h-4" />
               FAQs
             </TabsTrigger>
-            <TabsTrigger value="database" className="gap-2 text-sm">
+            <TabsTrigger value="database" className="gap-2 text-sm rounded-lg px-4">
               <Database className="w-4 h-4" />
               Database
             </TabsTrigger>
-            <TabsTrigger value="styles" className="gap-2 text-sm">
+            <TabsTrigger value="styles" className="gap-2 text-sm rounded-lg px-4">
               <Palette className="w-4 h-4" />
               Styles
             </TabsTrigger>
           </TabsList>
 
           {/* FAQs Tab */}
-          <TabsContent value="faqs">
-            <Card>
+          <TabsContent value="faqs" className="mt-0">
+            <Card className="border-border/50 shadow-sm">
               <CardHeader className="pb-4">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4 text-primary" />
-                  Frequently Asked Questions
-                </CardTitle>
-                <CardDescription className="text-sm">Add questions that appear as suggestions in the chat</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <HelpCircle className="w-4 h-4 text-primary" />
+                      Frequently Asked Questions
+                    </CardTitle>
+                    <CardDescription className="text-sm mt-1">These appear as quick suggestions in the chat widget</CardDescription>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">{faqs.length} FAQs</Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-3 p-4 rounded-lg bg-muted/30 border border-border/50">
+                {/* Add FAQ Form */}
+                <div className="space-y-3 p-4 rounded-xl bg-muted/30 border border-border/50">
                   <Input
-                    placeholder="Question"
+                    placeholder="Enter a question..."
                     value={newFaq.question}
                     onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
-                    className="bg-background"
+                    className="bg-background h-10"
                   />
                   <Textarea
-                    placeholder="Answer"
+                    placeholder="Enter the answer..."
                     value={newFaq.answer}
                     onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
-                    rows={2}
-                    className="bg-background"
+                    rows={3}
+                    className="bg-background resize-none"
                   />
                   <Button
                     onClick={addFaq}
@@ -284,27 +335,31 @@ export default function BusinessDetail() {
                     size="sm"
                     className="gap-2"
                   >
-                    <Plus className="w-4 h-4" />
+                    {addingFaq ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                     Add FAQ
                   </Button>
                 </div>
 
+                {/* FAQ List */}
                 <div className="space-y-2">
                   {faqs.map((faq) => (
-                    <div key={faq.id} className="p-3 rounded-lg border border-border/50 bg-card">
+                    <div key={faq.id} className="p-4 rounded-xl border border-border/50 bg-card hover:border-border transition-colors">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm text-primary">{faq.question}</p>
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{faq.answer}</p>
+                          <p className="font-medium text-sm">{faq.question}</p>
+                          <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">{faq.answer}</p>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => deleteFaq(faq.id)} className="text-destructive hover:text-destructive h-8 w-8 shrink-0">
+                        <Button variant="ghost" size="icon" onClick={() => deleteFaq(faq.id)} className="text-muted-foreground hover:text-destructive h-8 w-8 shrink-0">
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
                   ))}
                   {faqs.length === 0 && (
-                    <p className="text-center text-muted-foreground py-6 text-sm">No FAQs added yet</p>
+                    <div className="text-center py-8">
+                      <HelpCircle className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                      <p className="text-muted-foreground text-sm">No FAQs added yet</p>
+                    </div>
                   )}
                 </div>
               </CardContent>
@@ -312,17 +367,23 @@ export default function BusinessDetail() {
           </TabsContent>
 
           {/* Database Tab */}
-          <TabsContent value="database">
-            <Card>
+          <TabsContent value="database" className="mt-0">
+            <Card className="border-border/50 shadow-sm">
               <CardHeader className="pb-4">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Database className="w-4 h-4 text-primary" />
-                  Knowledge Base
-                </CardTitle>
-                <CardDescription className="text-sm">Add content for your AI to reference</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Database className="w-4 h-4 text-primary" />
+                      Knowledge Base
+                    </CardTitle>
+                    <CardDescription className="text-sm mt-1">Train your AI with custom content</CardDescription>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">{knowledge.length} items</Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-3 p-4 rounded-lg bg-muted/30 border border-border/50">
+                {/* Add Knowledge Form */}
+                <div className="space-y-3 p-4 rounded-xl bg-muted/30 border border-border/50">
                   <div className="flex gap-2">
                     <Button
                       variant={newKnowledge.type === "text" ? "default" : "outline"}
@@ -342,74 +403,70 @@ export default function BusinessDetail() {
                       <Globe className="w-4 h-4" />
                       Website
                     </Button>
-                    <Button
-                      variant={newKnowledge.type === "file" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setNewKnowledge({ ...newKnowledge, type: "file" })}
-                      className="gap-2"
-                      disabled
-                    >
-                      <Upload className="w-4 h-4" />
-                      File
-                    </Button>
                   </div>
                   <Input
-                    placeholder="Title"
+                    placeholder="Title (e.g., Company Policies)"
                     value={newKnowledge.title}
                     onChange={(e) => setNewKnowledge({ ...newKnowledge, title: e.target.value })}
-                    className="bg-background"
+                    className="bg-background h-10"
                   />
                   {newKnowledge.type === "text" && (
                     <Textarea
-                      placeholder="Enter your knowledge content..."
+                      placeholder="Enter your knowledge content here..."
                       value={newKnowledge.content}
                       onChange={(e) => setNewKnowledge({ ...newKnowledge, content: e.target.value })}
-                      rows={4}
-                      className="bg-background"
+                      rows={5}
+                      className="bg-background resize-none"
                     />
                   )}
                   {newKnowledge.type === "website" && (
                     <Input
-                      placeholder="https://example.com"
+                      placeholder="https://example.com/page"
                       value={newKnowledge.url}
                       onChange={(e) => setNewKnowledge({ ...newKnowledge, url: e.target.value })}
-                      className="bg-background"
+                      className="bg-background h-10"
                     />
                   )}
                   <Button
                     onClick={addKnowledge}
-                    disabled={addingKnowledge || !newKnowledge.title.trim()}
+                    disabled={addingKnowledge || !newKnowledge.title.trim() || (newKnowledge.type === "text" && !newKnowledge.content.trim()) || (newKnowledge.type === "website" && !newKnowledge.url.trim())}
                     size="sm"
                     className="gap-2"
                   >
-                    <Plus className="w-4 h-4" />
+                    {addingKnowledge ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                     Add Knowledge
                   </Button>
                 </div>
 
+                {/* Knowledge List */}
                 <div className="space-y-2">
                   {knowledge.map((item) => (
-                    <div key={item.id} className="p-3 rounded-lg border border-border/50 bg-card">
+                    <div key={item.id} className="p-4 rounded-xl border border-border/50 bg-card hover:border-border transition-colors">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                             {item.type === "text" && <FileText className="w-4 h-4 text-primary" />}
                             {item.type === "website" && <Globe className="w-4 h-4 text-primary" />}
-                            {item.type === "file" && <Upload className="w-4 h-4 text-primary" />}
                           </div>
                           <div className="min-w-0">
                             <p className="font-medium text-sm">{item.title}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{item.type}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {item.type === "text" && `${item.content?.slice(0, 60)}...`}
+                              {item.type === "website" && item.url}
+                            </p>
                           </div>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => deleteKnowledge(item.id)} className="text-destructive hover:text-destructive h-8 w-8 shrink-0">
+                        <Button variant="ghost" size="icon" onClick={() => deleteKnowledge(item.id)} className="text-muted-foreground hover:text-destructive h-8 w-8 shrink-0">
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
                   ))}
                   {knowledge.length === 0 && (
-                    <p className="text-center text-muted-foreground py-6 text-sm">No knowledge added yet</p>
+                    <div className="text-center py-8">
+                      <Database className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                      <p className="text-muted-foreground text-sm">No knowledge added yet</p>
+                    </div>
                   )}
                 </div>
               </CardContent>
@@ -417,119 +474,169 @@ export default function BusinessDetail() {
           </TabsContent>
 
           {/* Styles Tab */}
-          <TabsContent value="styles">
-            <Card>
+          <TabsContent value="styles" className="mt-0">
+            <Card className="border-border/50 shadow-sm">
               <CardHeader className="pb-4">
-                <CardTitle className="text-base flex items-center gap-2">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
                   <Palette className="w-4 h-4 text-primary" />
                   Widget Appearance
                 </CardTitle>
-                <CardDescription className="text-sm">Customize how your chatbot looks</CardDescription>
+                <CardDescription className="text-sm mt-1">Customize how your chatbot looks on your website</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
+              <CardContent className="space-y-6">
+                {/* Colors */}
+                <div className="grid gap-5 md:grid-cols-3">
                   <div className="space-y-2">
-                    <Label className="text-sm">Primary Color</Label>
+                    <Label className="text-sm font-medium">Primary Color</Label>
                     <div className="flex gap-2">
+                      <div className="relative">
+                        <Input
+                          type="color"
+                          value={styles.primary_color}
+                          onChange={(e) => setStyles({ ...styles, primary_color: e.target.value })}
+                          className="w-12 h-10 p-1 cursor-pointer rounded-lg"
+                        />
+                      </div>
                       <Input
-                        type="color"
                         value={styles.primary_color}
                         onChange={(e) => setStyles({ ...styles, primary_color: e.target.value })}
-                        className="w-12 h-10 p-1 cursor-pointer"
-                      />
-                      <Input
-                        value={styles.primary_color}
-                        onChange={(e) => setStyles({ ...styles, primary_color: e.target.value })}
-                        className="flex-1"
+                        className="flex-1 h-10 font-mono text-sm"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm">Background Color</Label>
+                    <Label className="text-sm font-medium">Background</Label>
                     <div className="flex gap-2">
                       <Input
                         type="color"
                         value={styles.background_color}
                         onChange={(e) => setStyles({ ...styles, background_color: e.target.value })}
-                        className="w-12 h-10 p-1 cursor-pointer"
+                        className="w-12 h-10 p-1 cursor-pointer rounded-lg"
                       />
                       <Input
                         value={styles.background_color}
                         onChange={(e) => setStyles({ ...styles, background_color: e.target.value })}
-                        className="flex-1"
+                        className="flex-1 h-10 font-mono text-sm"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm">Text Color</Label>
+                    <Label className="text-sm font-medium">Text Color</Label>
                     <div className="flex gap-2">
                       <Input
                         type="color"
                         value={styles.text_color}
                         onChange={(e) => setStyles({ ...styles, text_color: e.target.value })}
-                        className="w-12 h-10 p-1 cursor-pointer"
+                        className="w-12 h-10 p-1 cursor-pointer rounded-lg"
                       />
                       <Input
                         value={styles.text_color}
                         onChange={(e) => setStyles({ ...styles, text_color: e.target.value })}
-                        className="flex-1"
+                        className="flex-1 h-10 font-mono text-sm"
                       />
                     </div>
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-sm">Avatar URL</Label>
+                {/* Avatar URL */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Avatar URL</Label>
+                  <div className="flex gap-3">
+                    {styles.avatar_url && (
+                      <img 
+                        src={styles.avatar_url} 
+                        alt="Avatar preview" 
+                        className="w-10 h-10 rounded-lg object-cover border border-border"
+                        onError={(e) => e.currentTarget.style.display = 'none'}
+                      />
+                    )}
                     <Input
                       placeholder="https://example.com/avatar.png"
                       value={styles.avatar_url || ""}
                       onChange={(e) => setStyles({ ...styles, avatar_url: e.target.value || null })}
+                      className="flex-1 h-10"
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">Leave empty to use default avatar</p>
+                </div>
 
+                {/* Style Options */}
+                <div className="grid gap-5 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label className="text-sm">Corner Style</Label>
+                    <Label className="text-sm font-medium">Corner Style</Label>
                     <div className="flex gap-2">
                       <Button
                         variant={styles.border_radius === "rounded" ? "default" : "outline"}
                         size="sm"
                         onClick={() => setStyles({ ...styles, border_radius: "rounded" })}
+                        className="flex-1 gap-2"
                       >
+                        {styles.border_radius === "rounded" && <CheckCircle2 className="w-3.5 h-3.5" />}
                         Rounded
                       </Button>
                       <Button
                         variant={styles.border_radius === "square" ? "default" : "outline"}
                         size="sm"
                         onClick={() => setStyles({ ...styles, border_radius: "square" })}
+                        className="flex-1 gap-2"
                       >
+                        {styles.border_radius === "square" && <CheckCircle2 className="w-3.5 h-3.5" />}
                         Square
                       </Button>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm">Position</Label>
+                    <Label className="text-sm font-medium">Position</Label>
                     <div className="flex gap-2">
                       <Button
                         variant={styles.position === "bottom-right" ? "default" : "outline"}
                         size="sm"
                         onClick={() => setStyles({ ...styles, position: "bottom-right" })}
+                        className="flex-1 gap-2"
                       >
-                        Right
+                        {styles.position === "bottom-right" && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        Bottom Right
                       </Button>
                       <Button
                         variant={styles.position === "bottom-left" ? "default" : "outline"}
                         size="sm"
                         onClick={() => setStyles({ ...styles, position: "bottom-left" })}
+                        className="flex-1 gap-2"
                       >
-                        Left
+                        {styles.position === "bottom-left" && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        Bottom Left
                       </Button>
                     </div>
                   </div>
                 </div>
 
-                <Button onClick={saveStyles} disabled={savingStyles} className="gap-2 mt-4">
+                {/* Preview */}
+                <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
+                  <p className="text-xs font-medium text-muted-foreground mb-3">Preview</p>
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className={`w-12 h-12 ${styles.border_radius === "rounded" ? "rounded-full" : "rounded-xl"} flex items-center justify-center text-white font-semibold shadow-lg`}
+                      style={{ backgroundColor: styles.primary_color }}
+                    >
+                      {styles.avatar_url ? (
+                        <img src={styles.avatar_url} alt="" className={`w-full h-full object-cover ${styles.border_radius === "rounded" ? "rounded-full" : "rounded-xl"}`} />
+                      ) : (
+                        business.name.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div 
+                      className={`p-3 ${styles.border_radius === "rounded" ? "rounded-xl" : "rounded-lg"} border max-w-[200px]`}
+                      style={{ backgroundColor: styles.background_color, color: styles.text_color, borderColor: `${styles.primary_color}30` }}
+                    >
+                      <p className="text-sm">Hello! How can I help you today?</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Button onClick={saveStyles} disabled={savingStyles} className="gap-2">
                   {savingStyles ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Save Styles
                 </Button>
