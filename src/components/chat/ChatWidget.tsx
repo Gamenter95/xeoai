@@ -55,9 +55,11 @@ export default function ChatWidget({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const [limitReached, setLimitReached] = useState(false);
+
   const sendMessage = async (messageText?: string) => {
     const text = messageText || input.trim();
-    if (!text || isLoading) return;
+    if (!text || isLoading || limitReached) return;
 
     const userMessage: Message = { role: "user", content: text };
     setMessages((prev) => [...prev, userMessage]);
@@ -79,6 +81,20 @@ export default function ChatWidget({
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Check for limit reached error
+        if (errorData.limitReached || errorData.error === "LIMIT_REACHED" || response.status === 429) {
+          setLimitReached(true);
+          setMessages((prev) => [
+            ...prev,
+            { 
+              role: "assistant", 
+              content: "⚠️ **Message Limit Reached**\n\nThis chatbot has reached its monthly message limit. Please contact the business owner or try again next month." 
+            },
+          ]);
+          return;
+        }
+        
         throw new Error(errorData.message || errorData.error || "Failed to get response");
       }
 
@@ -288,6 +304,15 @@ export default function ChatWidget({
 
           {/* Input */}
           <div className="p-4 border-t" style={{ backgroundColor, borderColor: `${primaryColor}10` }}>
+          {limitReached ? (
+            <div 
+              className={`p-3 ${radiusClasses} text-center border`}
+              style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}
+            >
+              <p className="text-sm font-medium text-red-700">⚠️ Message Limit Reached</p>
+              <p className="text-xs text-red-600 mt-1">This chatbot has reached its monthly limit.</p>
+            </div>
+          ) : (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -317,6 +342,7 @@ export default function ChatWidget({
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </Button>
             </form>
+          )}
           </div>
         </div>
       )}

@@ -13,6 +13,7 @@ import Embed from "./pages/Embed";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import WidgetPreview from "./pages/WidgetPreview";
+import Plans from "./pages/Plans";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminPlans from "./pages/admin/AdminPlans";
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/dashboard/analytics" element={<Analytics />} />
             <Route path="/dashboard/settings" element={<Settings />} />
             <Route path="/widget-preview/:businessId" element={<WidgetPreview />} />
+            <Route path="/plans" element={<Plans />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/analytics" element={<AdminAnalytics />} />
             <Route path="/admin/plans" element={<AdminPlans />} />

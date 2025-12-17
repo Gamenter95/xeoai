@@ -7,6 +7,39 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Simple hash function for question caching
+function hashQuestion(question: string): string {
+  const normalized = question.toLowerCase().trim().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ');
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(36);
+}
+
+// Check similarity between questions (basic)
+function isSimilarQuestion(q1: string, q2: string): boolean {
+  const normalize = (s: string) => s.toLowerCase().trim().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ');
+  const n1 = normalize(q1);
+  const n2 = normalize(q2);
+  
+  if (n1 === n2) return true;
+  
+  // Check if one contains the other (for slight variations)
+  if (n1.includes(n2) || n2.includes(n1)) return true;
+  
+  // Basic word overlap check
+  const words1 = new Set(n1.split(' '));
+  const words2 = new Set(n2.split(' '));
+  const intersection = [...words1].filter(w => words2.has(w));
+  const union = new Set([...words1, ...words2]);
+  const similarity = intersection.length / union.size;
+  
+  return similarity > 0.7;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -75,15 +108,84 @@ serve(async (req) => {
     const messageLimit = planData?.message_limit || 100;
     const currentCount = usage?.message_count || 0;
 
+    // HARD STOP - Return error when limit reached
     if (currentCount >= messageLimit) {
+      console.log(`Limit reached for business ${businessId}: ${currentCount}/${messageLimit}`);
       return new Response(
         JSON.stringify({ 
-          error: "Message limit reached",
-          message: "This business has reached its monthly message limit. Please upgrade your plan for more messages."
+          error: "LIMIT_REACHED",
+          limitReached: true,
+          message: "Monthly message limit reached. Please upgrade your plan to continue chatting."
         }),
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Get the last user message
+    const lastUserMessage = messages[messages.length - 1];
+    if (!lastUserMessage || lastUserMessage.role !== "user") {
+      return new Response(
+        JSON.stringify({ error: "No user message found" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const userQuestion = lastUserMessage.content;
+    const questionHash = hashQuestion(userQuestion);
+
+    // Check cache for similar questions
+    const { data: cachedResponses } = await supabase
+      .from("cached_responses")
+      .select("*")
+      .eq("business_id", businessId)
+      .limit(50);
+
+    let cachedResponse = null;
+    if (cachedResponses && cachedResponses.length > 0) {
+      // First try exact hash match
+      cachedResponse = cachedResponses.find(c => c.question_hash === questionHash);
+      
+      // If no exact match, try similarity check
+      if (!cachedResponse) {
+        cachedResponse = cachedResponses.find(c => isSimilarQuestion(c.question, userQuestion));
+      }
+    }
+
+    // If cached response found, return it without calling OpenAI
+    if (cachedResponse) {
+      console.log(`Cache hit for business ${businessId}, question: "${userQuestion.substring(0, 50)}..."`);
+      
+      // Update hit count
+      await supabase
+        .from("cached_responses")
+        .update({ hit_count: cachedResponse.hit_count + 1 })
+        .eq("id", cachedResponse.id);
+
+      // Update usage count (still counts against limit)
+      await supabase
+        .from("usage_tracking")
+        .upsert(
+          {
+            business_id: businessId,
+            month_year: currentMonth,
+            message_count: currentCount + 1,
+          },
+          { onConflict: "business_id,month_year" }
+        );
+
+      // Return cached response as SSE stream format
+      const cachedContent = cachedResponse.response;
+      const sseData = `data: ${JSON.stringify({
+        choices: [{ delta: { content: cachedContent } }]
+      })}\n\ndata: [DONE]\n\n`;
+
+      return new Response(sseData, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
+
+    // No cache hit - proceed with OpenAI
+    console.log(`Cache miss for business ${businessId}, calling OpenAI`);
 
     // Fetch additional business data including knowledge base
     const [hoursResult, servicesResult, faqsResult, instructionsResult, knowledgeResult] = await Promise.all([
@@ -151,7 +253,7 @@ ${customInstructions ? `## Special Instructions & AI Memory\n${customInstruction
 - Never make up information that wasn't provided
 - If the business has specific instructions above, follow them carefully`;
 
-    // Call OpenAI API
+    // Call OpenAI API (non-streaming to capture full response for caching)
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -164,7 +266,6 @@ ${customInstructions ? `## Special Instructions & AI Memory\n${customInstruction
           { role: "system", content: systemPrompt },
           ...messages,
         ],
-        stream: true,
         max_tokens: 1000,
         temperature: 0.7,
       }),
@@ -185,6 +286,22 @@ ${customInstructions ? `## Special Instructions & AI Memory\n${customInstruction
       );
     }
 
+    const aiResponse = await response.json();
+    const assistantContent = aiResponse.choices[0]?.message?.content || "";
+
+    // Cache the response for future use
+    await supabase
+      .from("cached_responses")
+      .upsert(
+        {
+          business_id: businessId,
+          question_hash: questionHash,
+          question: userQuestion,
+          response: assistantContent,
+        },
+        { onConflict: "business_id,question_hash" }
+      );
+
     // Update usage count
     const { error: upsertError } = await supabase
       .from("usage_tracking")
@@ -203,37 +320,39 @@ ${customInstructions ? `## Special Instructions & AI Memory\n${customInstruction
 
     // Store conversation if session provided
     if (sessionId && messages.length > 0) {
-      const lastUserMessage = messages[messages.length - 1];
-      if (lastUserMessage.role === "user") {
-        const { data: existingConvo } = await supabase
+      const { data: existingConvo } = await supabase
+        .from("chat_conversations")
+        .select("id")
+        .eq("business_id", businessId)
+        .eq("session_id", sessionId)
+        .single();
+
+      let conversationId = existingConvo?.id;
+
+      if (!conversationId) {
+        const { data: newConvo } = await supabase
           .from("chat_conversations")
+          .insert({ business_id: businessId, session_id: sessionId })
           .select("id")
-          .eq("business_id", businessId)
-          .eq("session_id", sessionId)
           .single();
+        conversationId = newConvo?.id;
+      }
 
-        let conversationId = existingConvo?.id;
-
-        if (!conversationId) {
-          const { data: newConvo } = await supabase
-            .from("chat_conversations")
-            .insert({ business_id: businessId, session_id: sessionId })
-            .select("id")
-            .single();
-          conversationId = newConvo?.id;
-        }
-
-        if (conversationId) {
-          await supabase.from("chat_messages").insert({
-            conversation_id: conversationId,
-            role: "user",
-            content: lastUserMessage.content,
-          });
-        }
+      if (conversationId) {
+        await supabase.from("chat_messages").insert({
+          conversation_id: conversationId,
+          role: "user",
+          content: userQuestion,
+        });
       }
     }
 
-    return new Response(response.body, {
+    // Return response as SSE stream format for consistency
+    const sseData = `data: ${JSON.stringify({
+      choices: [{ delta: { content: assistantContent } }]
+    })}\n\ndata: [DONE]\n\n`;
+
+    return new Response(sseData, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {

@@ -184,6 +184,44 @@ export type Database = {
         }
         Relationships: []
       }
+      cached_responses: {
+        Row: {
+          business_id: string
+          created_at: string
+          hit_count: number
+          id: string
+          question: string
+          question_hash: string
+          response: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          hit_count?: number
+          id?: string
+          question: string
+          question_hash: string
+          response: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          hit_count?: number
+          id?: string
+          question?: string
+          question_hash?: string
+          response?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cached_responses_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_conversations: {
         Row: {
           business_id: string
