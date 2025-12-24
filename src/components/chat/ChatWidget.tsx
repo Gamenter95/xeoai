@@ -24,6 +24,7 @@ interface ChatWidgetProps {
   position?: "bottom-right" | "bottom-left";
   borderRadius?: "rounded" | "square";
   faqs?: FAQ[];
+  isFreeTier?: boolean;
 }
 
 export default function ChatWidget({ 
@@ -36,7 +37,8 @@ export default function ChatWidget({
   textColor = "#1f2937",
   position = "bottom-right",
   borderRadius = "rounded",
-  faqs = []
+  faqs = [],
+  isFreeTier = true
 }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -44,7 +46,9 @@ export default function ChatWidget({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
+  const [limitReached, setLimitReached] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const positionClasses = position === "bottom-right" ? "right-5" : "left-5";
   const radiusClasses = borderRadius === "rounded" ? "rounded-2xl" : "rounded-lg";
@@ -55,17 +59,123 @@ export default function ChatWidget({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const [limitReached, setLimitReached] = useState(false);
+  // Cleanup WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
 
-  const sendMessage = async (messageText?: string) => {
-    const text = messageText || input.trim();
-    if (!text || isLoading || limitReached) return;
+  const sendMessageFreeTier = async (messageText: string) => {
+    try {
+      // First, get the system prompt from our edge function
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/free-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessId,
+          sessionId,
+          message: messageText,
+        }),
+      });
 
-    const userMessage: Message = { role: "user", content: text };
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
+      const data = await response.json();
 
+      if (!response.ok) {
+        if (data.limitReached || data.error === "LIMIT_REACHED") {
+          setLimitReached(true);
+          setMessages((prev) => [
+            ...prev,
+            { 
+              role: "assistant", 
+              content: "⚠️ **Message Limit Reached**\n\nThis chatbot has reached its monthly message limit. Please contact the business owner or try again next month." 
+            },
+          ]);
+          return;
+        }
+        
+        // If not free tier, fall back to paid endpoint
+        if (data.usePaid) {
+          await sendMessagePaidTier(messageText);
+          return;
+        }
+        
+        throw new Error(data.error || "Failed to initialize chat");
+      }
+
+      const { systemPrompt, chatId } = data;
+
+      // Connect to WebSocket
+      const wsUrl = "wss://backend.buildpicoapps.com/api/chatbot/chat";
+      const websocket = new WebSocket(wsUrl);
+      wsRef.current = websocket;
+
+      // Add empty assistant message for streaming
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      websocket.addEventListener("open", () => {
+        console.log("WebSocket connected for free tier chat");
+        websocket.send(
+          JSON.stringify({
+            chatId: chatId,
+            appId: "more-method",
+            systemPrompt: systemPrompt,
+            message: messageText,
+          })
+        );
+      });
+
+      websocket.onmessage = (event) => {
+        setMessages((prev) => {
+          const lastMessage = prev[prev.length - 1];
+          if (lastMessage?.role === "assistant") {
+            return [
+              ...prev.slice(0, -1),
+              { role: "assistant", content: lastMessage.content + event.data }
+            ];
+          }
+          return prev;
+        });
+      };
+
+      websocket.onclose = (event) => {
+        console.log("WebSocket closed:", event.code);
+        setIsLoading(false);
+        wsRef.current = null;
+        
+        if (event.code !== 1000) {
+          setMessages((prev) => {
+            const lastMessage = prev[prev.length - 1];
+            if (lastMessage?.role === "assistant" && !lastMessage.content) {
+              return [
+                ...prev.slice(0, -1),
+                { role: "assistant", content: "Oops! Something went wrong. Please try again." }
+              ];
+            }
+            return prev;
+          });
+        }
+      };
+
+      websocket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        setIsLoading(false);
+      };
+
+    } catch (error: any) {
+      console.error("Free tier chat error:", error);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: error.message || "Sorry, something went wrong. Please try again." },
+      ]);
+      setIsLoading(false);
+    }
+  };
+
+  const sendMessagePaidTier = async (messageText: string) => {
+    const userMessage: Message = { role: "user", content: messageText };
     let assistantContent = "";
 
     try {
@@ -82,7 +192,6 @@ export default function ChatWidget({
       if (!response.ok) {
         const errorData = await response.json();
         
-        // Check for limit reached error
         if (errorData.limitReached || errorData.error === "LIMIT_REACHED" || response.status === 429) {
           setLimitReached(true);
           setMessages((prev) => [
@@ -140,6 +249,22 @@ export default function ChatWidget({
       ]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const sendMessage = async (messageText?: string) => {
+    const text = messageText || input.trim();
+    if (!text || isLoading || limitReached) return;
+
+    const userMessage: Message = { role: "user", content: text };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setIsLoading(true);
+
+    if (isFreeTier) {
+      await sendMessageFreeTier(text);
+    } else {
+      await sendMessagePaidTier(text);
     }
   };
 
