@@ -14,6 +14,7 @@ interface ChatbotData {
   position: "bottom-right" | "bottom-left";
   borderRadius: "rounded" | "square";
   faqs: { id: string; question: string }[];
+  isFreeTier: boolean;
 }
 
 export default function WidgetPreview() {
@@ -30,7 +31,7 @@ export default function WidgetPreview() {
   const fetchChatbotData = async () => {
     try {
       const [businessResult, stylesResult, faqsResult] = await Promise.all([
-        supabase.from("businesses").select("name, description").eq("id", businessId).single(),
+        supabase.from("businesses").select("name, description, user_id").eq("id", businessId).single(),
         supabase.from("chatbot_styles").select("*").eq("business_id", businessId).single(),
         supabase.from("business_faqs").select("id, question").eq("business_id", businessId).limit(5),
       ]);
@@ -38,6 +39,17 @@ export default function WidgetPreview() {
       const business = businessResult.data;
       const styles = stylesResult.data;
       const faqs = faqsResult.data || [];
+
+      // Check if user is on free tier
+      let isFreeTier = true;
+      if (business?.user_id) {
+        const { data: userPlan } = await supabase
+          .from("user_plans")
+          .select("plan")
+          .eq("user_id", business.user_id)
+          .single();
+        isFreeTier = userPlan?.plan === "free";
+      }
 
       setData({
         businessName: business?.name || "AI Assistant",
@@ -49,6 +61,7 @@ export default function WidgetPreview() {
         position: (styles?.position as "bottom-right" | "bottom-left") || "bottom-right",
         borderRadius: (styles?.border_radius as "rounded" | "square") || "rounded",
         faqs,
+        isFreeTier,
       });
     } catch (error) {
       console.error("Error fetching chatbot data:", error);
@@ -86,6 +99,7 @@ export default function WidgetPreview() {
           position={data.position}
           borderRadius={data.borderRadius}
           faqs={data.faqs}
+          isFreeTier={data.isFreeTier}
         />
       )}
     </div>
